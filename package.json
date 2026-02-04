@@ -1,0 +1,9 @@
+{
+  "name": "pdf-parser-service",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^4.19.0",
+    "pdf-parse": "^1.1.1"
+  }
+}
