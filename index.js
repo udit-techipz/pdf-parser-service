@@ -4,15 +4,14 @@ const fetch = global.fetch;
 const { buildChapters } = require("./buildChapters");
 const express = require("express");
 const pdfParse = require("pdf-parse");
-
 const { createClient } = require("@supabase/supabase-js");
+const OpenAI = require("openai");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const OpenAI = require("openai");
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -70,8 +69,7 @@ app.get("/health", (req, res) => {
 
 app.post("/parse", async (req, res) => {
   try {
-    throw new Error("RAILWAY_NEW_VERSION_HIT");
-
+    
 const { pdf_url } = req.body;
 
     if (!pdf_url) {
