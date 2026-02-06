@@ -1,3 +1,5 @@
+// FORCE_REDEPLOY_2026_02_XX
+
 const fetch = global.fetch;
 const { buildChapters } = require("./buildChapters");
 const express = require("express");
