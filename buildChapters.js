@@ -1,3 +1,5 @@
+throw new Error("BUILD_CHAPTERS_LOADED");
+
 function buildChapters(text) {
   const words = text.split(/\s+/);
   const WORDS_PER_CHAPTER = 2200;
