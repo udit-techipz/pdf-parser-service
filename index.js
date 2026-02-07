@@ -178,43 +178,9 @@ if (fetchError) {
   throw new Error("Failed to fetch chapters for summarisation");
 }
 
-// 10. Generate real summaries with OpenAI
+// 10. Generate summaries (temporary stub)
 for (const chapter of storedChapters) {
-  const prompt = `
-You are creating a podcast-style summary of a self-help book chapter.
-
-Chapter title:
-"${chapter.title}"
-
-Instructions:
-- Create exactly ${bulletCount} bullet points.
-- Each bullet captures one key idea.
-- Use clear, conversational language.
-- No fluff. No repetition.
-
-Then convert the bullets into a short dialogue:
-- Host explains the idea.
-- Guest adds reflection or example.
-- Calm, practical tone.
-
-Chapter text:
-"""
-${chapter.raw_text}
-"""
-`;
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.4
-  });
-
-  const summaryText =
-    completion.choices[0]?.message?.content?.trim();
-
-  if (!summaryText) {
-    throw new Error("Empty summary returned from OpenAI");
-  }
+  const summaryText = chapter.raw_text.slice(0, 1200);
 
   await supabase
     .from("chapter_summaries")
@@ -225,6 +191,7 @@ ${chapter.raw_text}
       summary: summaryText
     });
 }
+
 
 
 // 11. Generate audio for each chapter summary
