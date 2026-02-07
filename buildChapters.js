@@ -1,16 +1,39 @@
 function buildChapters(text) {
   const lines = text.split(/\r?\n/);
 
+  // More permissive chapter detection
   const chapterRegex =
-    /^(chapter\s+\d+|chapter\s+[ivxlcdm]+|foreword|introduction|preface|prologue|epilogue)$/i;
+    /^(chapter|chap|ch)\s+([0-9]+|[ivxlcdm]+)\b/i;
 
   const chapters = [];
   let current = null;
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
 
     if (!line) continue;
+
+    // Handle cases like:
+    // CHAPTER
+    // I
+    if (
+      line.toLowerCase() === "chapter" &&
+      i + 1 < lines.length &&
+      /^[ivxlcdm]+$/i.test(lines[i + 1].trim())
+    ) {
+      if (current) {
+        finalize(current);
+        chapters.push(current);
+      }
+
+      current = {
+        title: `Chapter ${lines[i + 1].trim()}`,
+        raw_text: ""
+      };
+
+      i++; // skip numeral line
+      continue;
+    }
 
     if (chapterRegex.test(line)) {
       if (current) {
@@ -20,10 +43,13 @@ function buildChapters(text) {
 
       current = {
         title: line,
-        raw_text: "",
+        raw_text: ""
       };
-    } else if (current) {
-      current.raw_text += rawLine + "\n";
+      continue;
+    }
+
+    if (current) {
+      current.raw_text += line + "\n";
     }
   }
 
@@ -32,8 +58,8 @@ function buildChapters(text) {
     chapters.push(current);
   }
 
-  // Fallback: no chapters detected
-  if (chapters.length === 0) {
+  // Fallback
+  if (chapters.length <= 1) {
     const words = text.split(/\s+/).length;
     return [{
       chapter_index: 1,
