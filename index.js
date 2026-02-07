@@ -5,17 +5,12 @@ const { buildChapters } = require("./buildChapters");
 const express = require("express");
 const pdfParse = require("pdf-parse");
 const { createClient } = require("@supabase/supabase-js");
-const OpenAI = require("openai");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 async function synthesizeSpeech(text, filename) {
   const response = await fetch(
@@ -230,7 +225,6 @@ ${chapter.raw_text}
       summary: summaryText
     });
 }
-
 
 
 // 11. Generate audio for each chapter summary
