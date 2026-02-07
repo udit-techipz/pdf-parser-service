@@ -1,88 +1,30 @@
 function buildChapters(text) {
-  const lines = text.split(/\r?\n/);
-
-  // More permissive chapter detection
-  const chapterRegex =
-    /^(chapter|chap|ch)\s+([0-9]+|[ivxlcdm]+)\b/i;
+  const words = text.split(/\s+/);
+  const WORDS_PER_CHAPTER = 2200;
 
   const chapters = [];
-  let current = null;
+  let start = 0;
+  let index = 1;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+  while (start < words.length) {
+    const chunk = words.slice(start, start + WORDS_PER_CHAPTER);
+    const raw_text = chunk.join(" ");
 
-    if (!line) continue;
+    const word_count = chunk.length;
 
-    // Handle cases like:
-    // CHAPTER
-    // I
-    if (
-      line.toLowerCase() === "chapter" &&
-      i + 1 < lines.length &&
-      /^[ivxlcdm]+$/i.test(lines[i + 1].trim())
-    ) {
-      if (current) {
-        finalize(current);
-        chapters.push(current);
-      }
+    chapters.push({
+      chapter_index: index,
+      title: `Chapter ${index}`,
+      raw_text,
+      word_count,
+      estimated_minutes: Math.ceil(word_count / 160)
+    });
 
-      current = {
-        title: `Chapter ${lines[i + 1].trim()}`,
-        raw_text: ""
-      };
-
-      i++; // skip numeral line
-      continue;
-    }
-
-    if (chapterRegex.test(line)) {
-      if (current) {
-        finalize(current);
-        chapters.push(current);
-      }
-
-      current = {
-        title: line,
-        raw_text: ""
-      };
-      continue;
-    }
-
-    if (current) {
-      current.raw_text += line + "\n";
-    }
+    start += WORDS_PER_CHAPTER;
+    index++;
   }
 
-  if (current) {
-    finalize(current);
-    chapters.push(current);
-  }
-
-  // Fallback
-  if (chapters.length <= 1) {
-    const words = text.split(/\s+/).length;
-    return [{
-      chapter_index: 1,
-      title: "Full Book",
-      raw_text: text,
-      word_count: words,
-      estimated_minutes: Math.ceil(words / 160)
-    }];
-  }
-
-  return chapters.map((c, i) => ({
-    chapter_index: i + 1,
-    title: c.title,
-    raw_text: c.raw_text.trim(),
-    word_count: c.raw_text.split(/\s+/).length,
-    estimated_minutes: Math.ceil(
-      c.raw_text.split(/\s+/).length / 160
-    )
-  }));
-}
-
-function finalize(chapter) {
-  chapter.raw_text = chapter.raw_text.trim();
+  return chapters;
 }
 
 module.exports = { buildChapters };
