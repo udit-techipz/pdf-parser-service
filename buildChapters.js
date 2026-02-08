@@ -1,10 +1,11 @@
-throw new Error("BUILD_CHAPTERS_LOADED");
-
 function buildChapters(text) {
-  const words = text.split(/\s+/);
-  const WORDS_PER_CHAPTER = 2200;
-console.log("BUILD_CHAPTERS_WORD_COUNT =", words.length);
+  const normalized = text
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
+  const words = normalized.split(" ");
+  const WORDS_PER_CHAPTER = 2200;
 
   const chapters = [];
   let start = 0;
@@ -13,7 +14,6 @@ console.log("BUILD_CHAPTERS_WORD_COUNT =", words.length);
   while (start < words.length) {
     const chunk = words.slice(start, start + WORDS_PER_CHAPTER);
     const raw_text = chunk.join(" ");
-
     const word_count = chunk.length;
 
     chapters.push({
