@@ -118,6 +118,7 @@ const cleanedText = parsed.text
   .trim();
 
 const chapters = buildChapters(cleanedText);
+console.log("CHAPTERS_BUILT_COUNT =", chapters.length);
 
 
 // 3. Remove any existing chapters for this job (safety)
