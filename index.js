@@ -112,7 +112,13 @@ const job_id = job.id;
 
 
 // 2. Build chapters from parsed text
-const chapters = buildChapters(parsed.text);
+const cleanedText = parsed.text
+  .replace(/\n+/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+const chapters = buildChapters(cleanedText);
+
 
 // 3. Remove any existing chapters for this job (safety)
 await supabase
