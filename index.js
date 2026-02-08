@@ -13,6 +13,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+console.log("SERVICE_BOOTED_AT", new Date().toISOString());
 
 async function synthesizeSpeech(text, filename) {
   const response = await fetch(
