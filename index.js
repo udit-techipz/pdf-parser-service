@@ -1,7 +1,9 @@
 // FORCE_REDEPLOY_2026_02_XX
 
 const fetch = global.fetch;
-const { buildChapters } = require("./buildChapters");
+const { buildChapters } = require("./buildChapters.js");
+console.log("buildChapters loaded from", require.resolve("./buildChapters.js"));
+
 const express = require("express");
 const pdfParse = require("pdf-parse");
 const { createClient } = require("@supabase/supabase-js");
