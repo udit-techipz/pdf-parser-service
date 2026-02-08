@@ -105,6 +105,10 @@ const job_id = job.id;
     // ✅ pdf-parse works ONLY like this
     const parsed = await pdfParse(buffer);
 
+// 🔍 TEMP DEBUG — ADD THESE TWO LINES
+console.log("RAW TEXT LENGTH:", parsed.text.length);
+console.log("WORD COUNT:", parsed.text.split(/\s+/).length);
+
     if (!parsed.text || parsed.text.length < 500) {
       return res
         .status(500)
