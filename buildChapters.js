@@ -5,7 +5,7 @@ function buildChapters(text) {
     .trim();
 
   const words = normalized.split(" ");
-  const WORDS_PER_CHAPTER = 2200;
+  const WORDS_PER_CHAPTER = 500;
 
   const chapters = [];
   let start = 0;
