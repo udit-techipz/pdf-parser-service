@@ -13,6 +13,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const geminiModel = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash"
+});
+
 console.log("SERVICE_BOOTED_AT", new Date().toISOString());
 
 async function synthesizeSpeech(text, filename) {
@@ -192,9 +200,39 @@ if (fetchError) {
   throw new Error("Failed to fetch chapters for summarisation");
 }
 
-// 10. Generate summaries (temporary stub)
+
+// 10. Generate summaries with Gemini
 for (const chapter of storedChapters) {
-  const summaryText = chapter.raw_text.slice(0, 1200);
+  const prompt = `
+You are creating a podcast-style summary of a self-help book chapter.
+
+Chapter title:
+"${chapter.title}"
+
+Instructions:
+- Create exactly ${bulletCount} bullet points.
+- Each bullet captures one key idea.
+- Use clear, conversational language.
+- No fluff. No repetition.
+
+Then convert the bullets into a short dialogue:
+- Host explains the idea.
+- Guest adds reflection or example.
+- Calm, practical tone.
+
+Chapter text:
+"""
+${chapter.raw_text}
+"""
+`;
+
+  const result = await geminiModel.generateContent(prompt);
+  const response = result.response;
+  const summaryText = response.text().trim();
+
+  if (!summaryText) {
+    throw new Error("Empty summary returned from Gemini");
+  }
 
   await supabase
     .from("chapter_summaries")
