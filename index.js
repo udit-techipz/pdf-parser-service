@@ -21,6 +21,14 @@ const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash"
 });
 
+function extractJsonArray(text) {
+  const match = text.match(/\[\s*{[\s\S]*}\s*\]/);
+  if (!match) {
+    throw new Error("Gemini JSON block not found");
+  }
+  return JSON.parse(match[0]);
+}
+
 function chunkArray(arr, size) {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -247,12 +255,12 @@ ${ch.raw_text}
   const result = await geminiModel.generateContent(batchPrompt);
   const text = result.response.text();
 
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error("Gemini returned invalid JSON for batch");
-  }
+let parsed;
+try {
+  parsed = extractJsonArray(text);
+} catch (err) {
+  throw new Error(`Gemini JSON parse failed: ${err.message}`);
+}
 
   for (const item of parsed) {
     const chapter = batch.find(c => c.chapter_index === item.chapter_index);
