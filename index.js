@@ -21,6 +21,14 @@ const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash"
 });
 
+function chunkArray(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
 console.log("SERVICE_BOOTED_AT", new Date().toISOString());
 
 async function synthesizeSpeech(text, filename) {
@@ -201,49 +209,65 @@ if (fetchError) {
 }
 
 
-// 10. Generate summaries with Gemini
-for (const chapter of storedChapters) {
-  const prompt = `
-You are creating a podcast-style summary of a self-help book chapter.
+// 10. Generate summaries with Gemini (batched)
+const BATCH_SIZE = 4;
+const chapterBatches = chunkArray(storedChapters, BATCH_SIZE);
 
-Chapter title:
-"${chapter.title}"
+for (const batch of chapterBatches) {
+  const batchPrompt = `
+You are creating podcast-style summaries of self-help book chapters.
 
 Instructions:
-- Create exactly ${bulletCount} bullet points.
-- Each bullet captures one key idea.
-- Use clear, conversational language.
-- No fluff. No repetition.
+- For EACH chapter below:
+  - Create exactly ${bulletCount} bullet points.
+  - Each bullet captures one key idea.
+  - Clear, conversational language.
+  - No fluff. No repetition.
+- Then write a short dialogue per chapter:
+  - Host explains the idea.
+  - Guest adds reflection or example.
+  - Calm, practical tone.
 
-Then convert the bullets into a short dialogue:
-- Host explains the idea.
-- Guest adds reflection or example.
-- Calm, practical tone.
+Return the result in this EXACT JSON format:
+[
+  {
+    "chapter_index": <number>,
+    "summary": "<text>"
+  }
+]
 
-Chapter text:
-"""
-${chapter.raw_text}
-"""
+Chapters:
+${batch.map(ch => `
+Chapter ${ch.chapter_index}: "${ch.title}"
+---
+${ch.raw_text}
+`).join("\n\n")}
 `;
 
-  const result = await geminiModel.generateContent(prompt);
-  const response = result.response;
-  const summaryText = response.text().trim();
+  const result = await geminiModel.generateContent(batchPrompt);
+  const text = result.response.text();
 
-  if (!summaryText) {
-    throw new Error("Empty summary returned from Gemini");
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Gemini returned invalid JSON for batch");
   }
 
-  await supabase
-    .from("chapter_summaries")
-    .insert({
-      job_id,
-      chapter_id: chapter.id,
-      bullet_count: bulletCount,
-      summary: summaryText
-    });
-}
+  for (const item of parsed) {
+    const chapter = batch.find(c => c.chapter_index === item.chapter_index);
+    if (!chapter || !item.summary) continue;
 
+    await supabase
+      .from("chapter_summaries")
+      .insert({
+        job_id,
+        chapter_id: chapter.id,
+        bullet_count: bulletCount,
+        summary: item.summary
+      });
+  }
+}
 
 
 // 11. Generate audio for each chapter summary
