@@ -1,34 +1,11 @@
-// FORCE_REDEPLOY_2026_02_XX
-
 const fetch = global.fetch;
-const { buildChapters } = require("./buildChapters.js");
-console.log("buildChapters loaded from", require.resolve("./buildChapters.js"));
-
+const { buildChapters } = require("./buildChapters");
 const express = require("express");
 const pdfParse = require("pdf-parse");
 const { createClient } = require("@supabase/supabase-js");
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash"
-});
-
-function extractJsonArray(text) {
-  const match = text.match(/\[\s*{[\s\S]*}\s*\]/);
-  if (!match) {
-    throw new Error("Gemini JSON block not found");
-  }
-  return JSON.parse(match[0]);
-}
-
+// ---------- Helpers ----------
 function chunkArray(arr, size) {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -37,50 +14,28 @@ function chunkArray(arr, size) {
   return chunks;
 }
 
-console.log("SERVICE_BOOTED_AT", new Date().toISOString());
+const sleep = ms => new Promise(res => setTimeout(res, ms));
 
-async function synthesizeSpeech(text, filename) {
-  const response = await fetch(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        input: { text },
-        voice: {
-          languageCode: "en-US",
-          name: "en-US-Neural2-D"
-        },
-        audioConfig: {
-          audioEncoding: "MP3"
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`TTS failed: ${err}`);
+function extractJsonArray(text) {
+  const match = text.match(/\[\s*{[\s\S]*}\s*\]/);
+  if (!match) {
+    throw new Error("Gemini JSON block not found");
   }
-
-  const data = await response.json();
-  const audioBuffer = Buffer.from(data.audioContent, "base64");
-
-  const { error } = await supabase.storage
-    .from("audio")
-    .upload(filename, audioBuffer, {
-      contentType: "audio/mpeg",
-      upsert: true
-    });
-
-  if (error) {
-    throw new Error("Failed to upload audio");
-  }
-
-  return filename;
+  return JSON.parse(match[0]);
 }
+// -------- End helpers --------
+
+// ---------- Clients ----------
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const geminiModel = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash"
+});
+// -------- End clients --------
 
 const app = express();
 app.use(express.json({ strict: true }));
@@ -91,237 +46,162 @@ app.get("/health", (req, res) => {
 
 app.post("/parse", async (req, res) => {
   try {
-    
-const { pdf_url } = req.body;
-
+    const { pdf_url } = req.body;
     if (!pdf_url) {
       return res.status(400).json({ error: "pdf_url required" });
     }
 
-// 1. Create job
-const { data: job, error: jobError } = await supabase
-  .from("jobs")
-  .insert({
-    status: "uploaded"
-  })
-  .select()
-  .single();
+    // 1. Create job
+    const { data: job, error: jobError } = await supabase
+      .from("jobs")
+      .insert({ status: "uploaded" })
+      .select()
+      .single();
 
-if (jobError) {
-  throw new Error("Failed to create job");
-}
+    if (jobError) throw new Error("Failed to create job");
+    const job_id = job.id;
 
-const job_id = job.id;
-
-    // ✅ Use native Node fetch (Node 18+)
+    // 2. Fetch + parse PDF
     const response = await fetch(pdf_url);
-
     if (!response.ok) {
-      return res
-        .status(500)
-        .json({ error: `Failed to download PDF (${response.status})` });
+      return res.status(500).json({
+        error: `Failed to download PDF (${response.status})`
+      });
     }
 
-    // ✅ Convert to real Node Buffer
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    // ✅ pdf-parse works ONLY like this
     const parsed = await pdfParse(buffer);
 
-// 🔍 TEMP DEBUG — ADD THESE TWO LINES
-console.log("RAW TEXT LENGTH:", parsed.text?.length);
-console.log("WORD COUNT:", parsed.text?.split(/\s+/).length);
-
     if (!parsed.text || parsed.text.length < 500) {
-      return res
-        .status(500)
-        .json({ error: "PDF text extraction failed" });
+      return res.status(500).json({ error: "PDF text extraction failed" });
     }
 
+    // 3. Build chapters
+    const chapters = buildChapters(parsed.text);
 
-// 2. Build chapters from parsed text
-const cleanedText = parsed.text
-  .replace(/\n+/g, " ")
-  .replace(/\s+/g, " ")
-  .trim();
+    await supabase.from("chapters").delete().eq("job_id", job_id);
 
-const chapters = buildChapters(cleanedText);
-console.log("CHAPTERS_BUILT_COUNT =", chapters.length);
+    const chapterRows = chapters.map(c => ({
+      job_id,
+      chapter_index: c.chapter_index,
+      title: c.title,
+      raw_text: c.raw_text,
+      word_count: c.word_count,
+      estimated_minutes: c.estimated_minutes
+    }));
 
+    await supabase.from("chapters").insert(chapterRows);
 
-// 3. Remove any existing chapters for this job (safety)
-await supabase
-  .from("chapters")
-  .delete()
-  .eq("job_id", job_id);
+    const totalMinutes = chapters.reduce(
+      (sum, c) => sum + c.estimated_minutes,
+      0
+    );
 
-// 4. Insert chapters
-const chapterRows = chapters.map(c => ({
-  job_id,
-  chapter_index: c.chapter_index,
-  title: c.title,
-  raw_text: c.raw_text,
-  word_count: c.word_count,
-  estimated_minutes: c.estimated_minutes
-}));
+    await supabase
+      .from("jobs")
+      .update({
+        estimated_total_minutes: totalMinutes,
+        status: "chapters_ready"
+      })
+      .eq("id", job_id);
 
-const { error: chapterError } = await supabase
-  .from("chapters")
-  .insert(chapterRows);
+    function decideBulletCount(total) {
+      if (total <= 120) return 7;
+      if (total <= 150) return 6;
+      if (total <= 180) return 5;
+      return 3;
+    }
 
-if (chapterError) {
-  throw new Error("Failed to insert chapters");
-}
+    const bulletCount = decideBulletCount(totalMinutes);
 
-// 5. Compute total estimated minutes
-const totalMinutes = chapters.reduce(
-  (sum, c) => sum + c.estimated_minutes,
-  0
-);
+    await supabase
+      .from("chapter_summaries")
+      .delete()
+      .eq("job_id", job_id);
 
-// 6. Update job with total duration
-await supabase
-  .from("jobs")
-  .update({
-    estimated_total_minutes: totalMinutes,
-    status: "chapters_ready"
-  })
-  .eq("id", job_id);
+    const { data: storedChapters } = await supabase
+      .from("chapters")
+      .select("*")
+      .eq("job_id", job_id)
+      .order("chapter_index");
 
-// 7. Decide bullet count based on total duration
-function decideBulletCount(total) {
-  if (total <= 120) return 7;
-  if (total <= 150) return 6;
-  if (total <= 180) return 5;
-  return 3;
-}
+    // 4. Gemini batched summaries (throttled)
+    const BATCH_SIZE = 4;
+    const chapterBatches = chunkArray(storedChapters, BATCH_SIZE);
 
-const bulletCount = decideBulletCount(totalMinutes);
-
-// 8. Clear any existing summaries for this job
-await supabase
-  .from("chapter_summaries")
-  .delete()
-  .eq("job_id", job_id);
-
-// 9. Fetch stored chapters (with IDs)
-const { data: storedChapters, error: fetchError } = await supabase
-  .from("chapters")
-  .select("*")
-  .eq("job_id", job_id)
-  .order("chapter_index");
-
-if (fetchError) {
-  throw new Error("Failed to fetch chapters for summarisation");
-}
-
-
-// 10. Generate summaries with Gemini (batched)
-const BATCH_SIZE = 4;
-const chapterBatches = chunkArray(storedChapters, BATCH_SIZE);
-
-for (const batch of chapterBatches) {
-  const batchPrompt = `
+    for (const batch of chapterBatches) {
+      const prompt = `
 You are creating podcast-style summaries of self-help book chapters.
 
 Instructions:
 - For EACH chapter below:
-  - Create exactly ${bulletCount} bullet points.
-  - Each bullet captures one key idea.
-  - Clear, conversational language.
-  - No fluff. No repetition.
+  - Create exactly ${bulletCount} bullet points
+  - Clear, conversational language
+  - No fluff or repetition
 - Then write a short dialogue per chapter:
-  - Host explains the idea.
-  - Guest adds reflection or example.
-  - Calm, practical tone.
+  - Host explains
+  - Guest reflects
 
-Return the result in this EXACT JSON format:
+Return ONLY valid JSON in this format:
 [
-  {
-    "chapter_index": <number>,
-    "summary": "<text>"
-  }
+  { "chapter_index": number, "summary": "text" }
 ]
 
 Chapters:
-${batch.map(ch => `
+${batch
+  .map(
+    ch => `
 Chapter ${ch.chapter_index}: "${ch.title}"
 ---
 ${ch.raw_text}
-`).join("\n\n")}
+`
+  )
+  .join("\n\n")}
 `;
 
-  const result = await geminiModel.generateContent(batchPrompt);
-  const text = result.response.text();
+      const result = await geminiModel.generateContent(prompt);
+      const parsedJson = extractJsonArray(result.response.text());
 
-let parsed;
-try {
-  parsed = extractJsonArray(text);
-} catch (err) {
-  throw new Error(`Gemini JSON parse failed: ${err.message}`);
-}
+      for (const item of parsedJson) {
+        const chapter = batch.find(
+          c => c.chapter_index === item.chapter_index
+        );
+        if (!chapter) continue;
 
-  for (const item of parsed) {
-    const chapter = batch.find(c => c.chapter_index === item.chapter_index);
-    if (!chapter || !item.summary) continue;
+        await supabase.from("chapter_summaries").insert({
+          job_id,
+          chapter_id: chapter.id,
+          bullet_count: bulletCount,
+          summary: item.summary
+        });
+      }
 
+      // 🔒 Throttle to stay under free-tier quota
+      await sleep(13000);
+    }
+
+    // 5. Finalise job
     await supabase
-      .from("chapter_summaries")
-      .insert({
-        job_id,
-        chapter_id: chapter.id,
-        bullet_count: bulletCount,
-        summary: item.summary
-      });
-  }
-}
+      .from("jobs")
+      .update({ status: "summarised" })
+      .eq("id", job_id);
 
-
-// 11. Generate audio for each chapter summary
-for (const chapter of storedChapters) {
-  const { data: summaryRow, error: summaryFetchError } = await supabase
-    .from("chapter_summaries")
-    .select("summary")
-    .eq("chapter_id", chapter.id)
-    .single();
-
-  if (summaryFetchError) {
-    throw new Error("Failed to fetch chapter summary for TTS");
-  }
-
-  const audioFilename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
-
-  await synthesizeSpeech(
-    summaryRow.summary,
-    audioFilename
-  );
-}
-
-// 12. Finalise job
-await supabase
-  .from("jobs")
-  .update({ status: "summarised" })
-  .eq("id", job_id);
-
-// 13. Return final response
-res.json({
-  ok: true,
-  job_id,
-  chapters: storedChapters.length,
-  estimated_total_minutes: totalMinutes
-});
-
-
+    res.json({
+      ok: true,
+      job_id,
+      chapters: storedChapters.length,
+      estimated_total_minutes: totalMinutes
+    });
   } catch (err) {
     res.status(500).json({
       ok: false,
-      error: err.message,
+      error: err.message
     });
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`PDF parser running on port ${PORT}`);
 });
