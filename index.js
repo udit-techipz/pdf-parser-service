@@ -125,7 +125,7 @@ app.post("/parse", async (req, res) => {
 
 await supabase
 .from ("jobs")
-.update ({ status; "summaries_ready" })
+.update ({ status: "summaries_ready" })
 .eq("id", job_id);
 
 
