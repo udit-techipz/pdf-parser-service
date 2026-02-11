@@ -121,16 +121,13 @@ app.post("/parse", async (req, res) => {
       })
       .eq("id", job_id);
 
-    // 5. Generate audio per chapter (NO LLM here — quota-safe)
-    for (const chapter of chapters) {
-      const filename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
-      await synthesizeSpeech(chapter.raw_text.slice(0, 4500), filename);
-    }
+    // 5. Audio will be generated asynchronously via /generate-audio
 
-    await supabase
-      .from("jobs")
-      .update({ status: "audio_ready" })
-      .eq("id", job_id);
+await supabase
+.from ("jobs")
+.update ({ status; "summaries_ready" })
+.eq("id", job_id);
+
 
     return res.json({
       ok: true,
@@ -138,6 +135,54 @@ app.post("/parse", async (req, res) => {
       chapters: chapters.length,
       estimated_total_minutes: totalMinutes,
     });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/generate-audio", async (req, res) => {
+  try {
+    const { job_id } = req.body;
+    if (!job_id) return res.status(400).json({ error: "job_id required" });
+
+    // Get chapters
+    const { data: chapters, error } = await supabase
+      .from("chapters")
+      .select("*")
+      .eq("job_id", job_id)
+      .order("chapter_index");
+
+    if (error) throw error;
+    if (!chapters || chapters.length === 0) {
+      throw new Error("No chapters found for job");
+    }
+
+    await supabase
+      .from("jobs")
+      .update({ status: "audio_generating" })
+      .eq("id", job_id);
+
+    // Generate audio sequentially
+    for (const chapter of chapters) {
+      const filename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
+
+      await synthesizeSpeech(
+        chapter.raw_text.slice(0, 4500),
+        filename
+      );
+
+      // Small delay to prevent rate-limit spikes
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    await supabase
+      .from("jobs")
+      .update({ status: "audio_ready" })
+      .eq("id", job_id);
+
+    return res.json({ ok: true, job_id });
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({ ok: false, error: err.message });
