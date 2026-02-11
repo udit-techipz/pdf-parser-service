@@ -94,32 +94,27 @@ app.post("/parse", async (req, res) => {
     // 3. Build chapters
     const chapters = buildChapters(parsed.text);
 
-    // 4. Persist chapters
-    await supabase.from("chapters").delete().eq("job_id", job_id);
+// 4. Persist chapters
+await supabase.from("chapters").delete().eq("job_id", job_id);
 
-    await supabase.from("chapters").insert(
-      chapters.map((c) => ({
-        job_id,
-        chapter_index: c.chapter_index,
-        title: c.title,
-        raw_text: c.raw_text,
-        word_count: c.word_count,
-        estimated_minutes: c.estimated_minutes,
-      }))
-    );
+const { error: chapterInsertError } = await supabase
+  .from("chapters")
+  .insert(
+    chapters.map((c) => ({
+      job_id,
+      chapter_index: c.chapter_index,
+      title: c.title,
+      raw_text: c.raw_text,
+      word_count: c.word_count,
+      estimated_minutes: c.estimated_minutes,
+    }))
+  );
 
-    const totalMinutes = chapters.reduce(
-      (sum, c) => sum + c.estimated_minutes,
-      0
-    );
+if (chapterInsertError) {
+  console.error("Chapter insert error:", chapterInsertError);
+  throw new Error("Chapter insert failed: " + chapterInsertError.message);
+}
 
-    await supabase
-      .from("jobs")
-      .update({
-        estimated_total_minutes: totalMinutes,
-        status: "chapters_ready",
-      })
-      .eq("id", job_id);
 
     // 5. Audio will be generated asynchronously via /generate-audio
 
