@@ -1,4 +1,4 @@
-// index.js — corrected, validated flow (Railway orchestrator)
+// index.js — Railway orchestrator (stable async audio version)
 
 const fetch = global.fetch;
 const express = require("express");
@@ -61,12 +61,14 @@ async function synthesizeSpeech(text, filename) {
   return filename;
 }
 
-// ================== ROUTE ==================
+// ================== ROUTES ==================
 
 app.post("/parse", async (req, res) => {
   try {
     const { pdf_url } = req.body;
-    if (!pdf_url) return res.status(400).json({ error: "pdf_url required" });
+    if (!pdf_url) {
+      return res.status(400).json({ error: "pdf_url required" });
+    }
 
     // 1. Create job
     const { data: job, error: jobError } = await supabase
@@ -94,35 +96,39 @@ app.post("/parse", async (req, res) => {
     // 3. Build chapters
     const chapters = buildChapters(parsed.text);
 
-// 4. Persist chapters
-await supabase.from("chapters").delete().eq("job_id", job_id);
+    // 4. Persist chapters
+    await supabase.from("chapters").delete().eq("job_id", job_id);
 
-const { error: chapterInsertError } = await supabase
-  .from("chapters")
-  .insert(
-    chapters.map((c) => ({
-      job_id,
-      chapter_index: c.chapter_index,
-      title: c.title,
-      raw_text: c.raw_text,
-      word_count: c.word_count,
-      estimated_minutes: c.estimated_minutes,
-    }))
-  );
+    const { error: chapterInsertError } = await supabase
+      .from("chapters")
+      .insert(
+        chapters.map((c) => ({
+          job_id,
+          chapter_index: c.chapter_index,
+          title: c.title,
+          raw_text: c.raw_text,
+          word_count: c.word_count,
+          estimated_minutes: c.estimated_minutes,
+        }))
+      );
 
-if (chapterInsertError) {
-  console.error("Chapter insert error:", chapterInsertError);
-  throw new Error("Chapter insert failed: " + chapterInsertError.message);
-}
+    if (chapterInsertError) {
+      throw new Error("Chapter insert failed: " + chapterInsertError.message);
+    }
 
+    // 5. Compute total duration
+    const totalMinutes = chapters.reduce(
+      (sum, c) => sum + c.estimated_minutes,
+      0
+    );
 
-    // 5. Audio will be generated asynchronously via /generate-audio
-
-await supabase
-.from ("jobs")
-.update ({ status: "summaries_ready" })
-.eq("id", job_id);
-
+    await supabase
+      .from("jobs")
+      .update({
+        estimated_total_minutes: totalMinutes,
+        status: "summaries_ready",
+      })
+      .eq("id", job_id);
 
     return res.json({
       ok: true,
@@ -130,18 +136,22 @@ await supabase
       chapters: chapters.length,
       estimated_total_minutes: totalMinutes,
     });
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
+// ================== ASYNC AUDIO ==================
+
 app.post("/generate-audio", async (req, res) => {
   try {
     const { job_id } = req.body;
-    if (!job_id) return res.status(400).json({ error: "job_id required" });
+    if (!job_id) {
+      return res.status(400).json({ error: "job_id required" });
+    }
 
-    // Get chapters
     const { data: chapters, error } = await supabase
       .from("chapters")
       .select("*")
@@ -158,7 +168,6 @@ app.post("/generate-audio", async (req, res) => {
       .update({ status: "audio_generating" })
       .eq("id", job_id);
 
-    // Generate audio sequentially
     for (const chapter of chapters) {
       const filename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
 
@@ -167,8 +176,7 @@ app.post("/generate-audio", async (req, res) => {
         filename
       );
 
-      // Small delay to prevent rate-limit spikes
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 400));
     }
 
     await supabase
