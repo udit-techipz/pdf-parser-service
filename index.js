@@ -25,40 +25,54 @@ app.get("/health", (_req, res) => {
 // ================== HELPERS ==================
 
 async function synthesizeSpeech(text, filename) {
-  const response = await fetch(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        input: { text },
-        voice: {
-          languageCode: "en-US",
-          name: "en-US-Neural2-D",
-        },
-        audioConfig: { audioEncoding: "MP3" },
-      }),
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+  try {
+    const response = await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: { text },
+          voice: {
+            languageCode: "en-US",
+            name: "en-US-Neural2-D",
+          },
+          audioConfig: { audioEncoding: "MP3" },
+        }),
+        signal: controller.signal
+      }
+    );
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`TTS failed: ${err}`);
     }
-  );
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`TTS failed: ${err}`);
+    const data = await response.json();
+    const audioBuffer = Buffer.from(data.audioContent, "base64");
+
+    const { error } = await supabase.storage
+      .from("audio")
+      .upload(filename, audioBuffer, {
+        contentType: "audio/mpeg",
+        upsert: true,
+      });
+
+    if (error) throw new Error("Failed to upload audio");
+
+    return filename;
+
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error("TTS request timed out");
+    }
+    throw err;
   }
-
-  const data = await response.json();
-  const audioBuffer = Buffer.from(data.audioContent, "base64");
-
-  const { error } = await supabase.storage
-    .from("audio")
-    .upload(filename, audioBuffer, {
-      contentType: "audio/mpeg",
-      upsert: true,
-    });
-
-  if (error) throw new Error("Failed to upload audio");
-
-  return filename;
 }
 
 // ================== ROUTES ==================
@@ -66,8 +80,8 @@ async function synthesizeSpeech(text, filename) {
 app.post("/parse", async (req, res) => {
   try {
     const { pdf_url } = req.body;
-    if (!pdf_url) {
-      return res.status(400).json({ error: "pdf_url required" });
+    if (!pdf_url || typeof pdf_url !== "string") {
+      return res.status(400).json({ error: "Valid_pdf_url required" });
     }
 
     // 1. Create job
@@ -152,6 +166,16 @@ app.post("/generate-audio", async (req, res) => {
       return res.status(400).json({ error: "job_id required" });
     }
 
+const { data: jobData } = await supabase
+  .from("jobs")
+  .select("status")
+  .eq("id", job_id)
+  .single();
+
+if (jobData.status === "audio_ready") {
+  return res.json({ ok: true, message: "Audio already generated", job_id });
+}
+
     const { data: chapters, error } = await supabase
       .from("chapters")
       .select("*")
@@ -190,6 +214,7 @@ app.post("/generate-audio", async (req, res) => {
     console.error(err);
     return res.status(500).json({ ok: false, error: err.message });
   }
+console.log('Generating audio for chapter ${chapter.chapter_index}');
 });
 
 // ===================Job Status Endpoint ================
