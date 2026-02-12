@@ -166,57 +166,62 @@ app.post("/generate-audio", async (req, res) => {
       return res.status(400).json({ error: "job_id required" });
     }
 
-const { data: jobData } = await supabase
-  .from("jobs")
-  .select("status")
-  .eq("id", job_id)
-  .single();
+    // Immediately respond
+    res.json({ ok: true, message: "Audio generation started", job_id });
 
-if (jobData.status === "audio_ready") {
-  return res.json({ ok: true, message: "Audio already generated", job_id });
-}
+    // Background async process
+    (async () => {
+      try {
+        const { data: chapters, error } = await supabase
+          .from("chapters")
+          .select("*")
+          .eq("job_id", job_id)
+          .order("chapter_index");
 
-    const { data: chapters, error } = await supabase
-      .from("chapters")
-      .select("*")
-      .eq("job_id", job_id)
-      .order("chapter_index");
+        if (error) throw error;
+        if (!chapters || chapters.length === 0) {
+          throw new Error("No chapters found for job");
+        }
 
-    if (error) throw error;
-    if (!chapters || chapters.length === 0) {
-      throw new Error("No chapters found for job");
-    }
+        await supabase
+          .from("jobs")
+          .update({ status: "audio_generating" })
+          .eq("id", job_id);
 
-    await supabase
-      .from("jobs")
-      .update({ status: "audio_generating" })
-      .eq("id", job_id);
+        for (const chapter of chapters) {
+          console.log(`Generating audio for chapter ${chapter.chapter_index}`);
 
-    for (const chapter of chapters) {
-      const filename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
+          const filename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
 
-      await synthesizeSpeech(
-        chapter.raw_text.slice(0, 4500),
-        filename
-      );
+          await synthesizeSpeech(
+            chapter.raw_text.slice(0, 4500),
+            filename
+          );
 
-      await new Promise((r) => setTimeout(r, 400));
-    }
+          await new Promise((r) => setTimeout(r, 400));
+        }
 
-    await supabase
-      .from("jobs")
-      .update({ status: "audio_ready" })
-      .eq("id", job_id);
+        await supabase
+          .from("jobs")
+          .update({ status: "audio_ready" })
+          .eq("id", job_id);
 
-    return res.json({ ok: true, job_id });
+        console.log(`Audio complete for job ${job_id}`);
+
+      } catch (err) {
+        console.error("Background audio error:", err);
+
+        await supabase
+          .from("jobs")
+          .update({ status: "failed" })
+          .eq("id", job_id);
+      }
+    })();
 
   } catch (err) {
-    console.error(err);
     return res.status(500).json({ ok: false, error: err.message });
   }
-console.log('Generating audio for chapter ${chapter.chapter_index}');
 });
-
 // ===================Job Status Endpoint ================
 app.get("/job-status/:job_id", async (req, res) => {
   try {
