@@ -188,18 +188,31 @@ app.post("/generate-audio", async (req, res) => {
           .update({ status: "audio_generating" })
           .eq("id", job_id);
 
-        for (const chapter of chapters) {
-          console.log(`Generating audio for chapter ${chapter.chapter_index}`);
+       for (const chapter of chapters) {
+  console.log(`Generating audio for chapter ${chapter.chapter_index}`);
 
-          const filename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
+  const filename = `${job_id}/chapter-${chapter.chapter_index}.mp3`;
 
-          await synthesizeSpeech(
-            chapter.raw_text.slice(0, 4500),
-            filename
-          );
+  await synthesizeSpeech(
+    chapter.raw_text.slice(0, 4500),
+    filename
+  );
 
-          await new Promise((r) => setTimeout(r, 400));
-        }
+  // Generate public URL
+  const { data: publicUrlData } = supabase
+    .storage
+    .from("audio")
+    .getPublicUrl(filename);
+
+  // Persist URL to chapters table
+  await supabase
+    .from("chapters")
+    .update({ audio_url: publicUrlData.publicUrl })
+    .eq("id", chapter.id);
+
+  await new Promise((r) => setTimeout(r, 400));
+}
+
 
         await supabase
           .from("jobs")
