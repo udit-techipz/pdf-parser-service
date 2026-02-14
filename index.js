@@ -272,6 +272,42 @@ app.get("/job-status/:job_id", async (req, res) => {
   }
 });
 
+// =================== JOB RESULT ENDPOINT ==================
+app.get("/job-result/:job_id", async (req, res) => {
+  try {
+    const { job_id } = req.params;
+
+    // Get job
+    const { data: job, error: jobError } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", job_id)
+      .single();
+
+    if (jobError) throw jobError;
+
+    // Get chapters with audio
+    const { data: chapters, error: chapterError } = await supabase
+      .from("chapters")
+      .select("chapter_index, title, estimated_minutes, audio_url")
+      .eq("job_id", job_id)
+      .order("chapter_index");
+
+    if (chapterError) throw chapterError;
+
+    return res.json({
+      ok: true,
+      job,
+      chapters
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+
 // ================== START ==================
 
 const PORT = process.env.PORT || 8080;
