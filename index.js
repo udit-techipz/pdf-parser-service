@@ -240,18 +240,35 @@ app.get("/job-status/:job_id", async (req, res) => {
   try {
     const { job_id } = req.params;
 
-    const { data, error } = await supabase
+	// Get job
+    const { data:job, error: joberror } = await supabase
       .from("jobs")
       .select("*")
       .eq("id", job_id)
       .single();
 
-    if (error) throw error;
+    if (joberror) throw joberror;
 
-    return res.json({ ok: true, job: data });
+	// Get chapters with audio URLs
+    const { data: chapters, error: chapterError } = await supabase
+      .from("chapters")
+      .select("chapter_index, title, estimated_minutes, audio_url")
+      .eq("job_id", job_id)
+      .order("chapter_index");
+
+    if (chapterError) throw chapterError;
+
+    return res.json({ 
+	ok: true, 
+	job, 
+	chapters
+      });
 
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
+    return res.status(500).json({ 
+	ok: false, 
+	error: err.message 
+      });
   }
 });
 
