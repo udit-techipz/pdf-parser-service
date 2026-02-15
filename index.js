@@ -5,6 +5,7 @@ const express = require("express");
 const pdfParse = require("pdf-parse");
 const { createClient } = require("@supabase/supabase-js");
 const { buildChapters } = require("./buildChapters");
+const cors = require("cors");
 
 // ================== ENV + CLIENTS ==================
 
@@ -16,6 +17,7 @@ const supabase = createClient(
 // ================== APP ==================
 
 const app = express();
+app.use(cors());
 app.use(express.json({ strict: true }));
 
 app.get("/health", (_req, res) => {

@@ -9,6 +9,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.39.5",
+    "cors": "^2.8.6",
     "express": "^4.19.0",
     "openai": "^4.28.0",
     "pdf-parse": "^1.1.1"
