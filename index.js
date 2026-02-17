@@ -22,27 +22,68 @@ app.get("/health", (_req, res) => {
 // ================== SCRIPT GENERATOR ==================
 
 function buildExecutiveScript(text) {
-  const trimmed = text.slice(0, 30000); // Guardrail
+	// Clean text
+	const cleaned = text
+		.replace(/\n+/g, " ")
+		.replace(/\s+/g, " ")	
+		.replace(/Page \d+gi, " ")
+		.trim();
+
+	// Guardrail ~25-30 minutes
+	const trimmed = cleaned.slice(0, 85000); 
+
+	// Break into logical chunks
+	const sections = [
+		trimmed.slice(0, 15000),
+		trimmed.slice(15000, 35000),
+		trimmed.slice(35000, 60000),
+		trimmed.slice(60000, 75000),
+		trimmed.slice(75000)
+	];
+		
 
   return `
 Welcome to your Executive Briefing.
 
-Today we distill the core ideas of this book into a structured, practical narrative.
+This session distills the strategic core of this book into a focused, high-leverage narrative designed for implementation.
 
-SECTION 1 — Core Thesis
-${trimmed.slice(0, 5000)}
+-----------------------------------------------------
 
-SECTION 2 — Key Principles
-${trimmed.slice(5000, 15000)}
+PART 1 — The Core Thesis
 
-SECTION 3 — Strategic Implications
-${trimmed.slice(15000, 23000)}
+${sections[0]}
 
-SECTION 4 — Practical Application
-${trimmed.slice(23000)}
+-----------------------------------------------------
+
+PART 2 — Foundational Principles
+
+${sections[1]}
+
+-----------------------------------------------------
+
+PART 3 — Structural Insights & Mental Models
+
+${sections[2]}
+
+-----------------------------------------------------
+
+PART 4 — Strategic Implications
+
+${sections[3]}
+
+-----------------------------------------------------
+
+PART 5 — Execution Blueprint
+
+${sections[4]}
+
+-----------------------------------------------------
 
 Closing Reflection:
-What would change if you actually implemented this?
+
+If you were to implement just one of these ideas immediately — which one would move your life forward most dramatically?
+
+End of briefing.
 `;
 }
 
