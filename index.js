@@ -22,25 +22,24 @@ app.get("/health", (_req, res) => {
 // ================== SCRIPT GENERATOR ==================
 
 function buildExecutiveScript(text) {
-	// Clean text
-	const cleaned = text
-		.replace(/\n+/g, " ")
-		.replace(/\s+/g, " ")	
-		.replace(/Page \d+/gi, " ")
-		.trim();
+  // 1. Clean noise
+  const cleaned = text
+    .replace(/Page \d+/gi, "")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 
-	// Guardrail ~25-30 minutes
-	const trimmed = cleaned.slice(0, 85000); 
+  // 2. Guardrail for ~30 min
+  const trimmed = cleaned.slice(0, 90000);
 
-	// Break into logical chunks
-	const sections = [
-		trimmed.slice(0, 15000),
-		trimmed.slice(15000, 35000),
-		trimmed.slice(35000, 60000),
-		trimmed.slice(60000, 75000),
-		trimmed.slice(75000)
-	];
-		
+  // 3. Split into meaningful paragraphs
+  const paragraphs = trimmed
+    .split(/\n/)
+    .map(p => p.trim())
+    .filter(p => p.length > 200);
+
+  // 4. Select high-density paragraphs
+  const selected = paragraphs.slice(0, 60).join("\n\n");
 
   return `
 Welcome to your Executive Briefing.
@@ -51,41 +50,44 @@ This session distills the strategic core of this book into a focused, high-lever
 
 PART 1 — The Core Thesis
 
-${sections[0]}
+The author’s central argument can be understood through the following key idea:
+
+${selected.slice(0, 20000)}
 
 -----------------------------------------------------
 
-PART 2 — Foundational Principles
+PART 2 — Structural Patterns
 
-${sections[1]}
+As the ideas develop, several recurring patterns emerge:
 
------------------------------------------------------
-
-PART 3 — Structural Insights & Mental Models
-
-${sections[2]}
+${selected.slice(20000, 45000)}
 
 -----------------------------------------------------
 
-PART 4 — Strategic Implications
+PART 3 — Strategic Implications
 
-${sections[3]}
+What does this mean for how you operate, decide, and lead?
+
+${selected.slice(45000, 70000)}
 
 -----------------------------------------------------
 
-PART 5 — Execution Blueprint
+PART 4 — Execution Blueprint
 
-${sections[4]}
+To translate insight into action, consider this practical synthesis:
+
+${selected.slice(70000)}
 
 -----------------------------------------------------
 
 Closing Reflection:
 
-If you were to implement just one of these ideas immediately — which one would move your life forward most dramatically?
+If you were to implement one principle immediately, which would create disproportionate leverage in your life or work?
 
 End of briefing.
 `;
 }
+
 
 // ================== TTS ==================
 
