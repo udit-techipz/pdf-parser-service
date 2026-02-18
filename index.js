@@ -26,7 +26,7 @@ function buildExecutiveScript(text) {
 	const cleaned = text
 		.replace(/\n+/g, " ")
 		.replace(/\s+/g, " ")	
-		.replace(/Page \d+gi, " ")
+		.replace(/Page \d+/gi, " ")
 		.trim();
 
 	// Guardrail ~25-30 minutes
