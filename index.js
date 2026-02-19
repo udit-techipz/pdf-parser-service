@@ -140,10 +140,10 @@ async function synthesizeSpeech(text, filename) {
 app.post("/parse", upload.single("pdf"), async (req, res) => {
   try {
     const { pdf_url } = req.body;
-    
+
     if (!pdf_url && !req.file) {
-      return res.status(400).json({ error: "Provide pdf_url or upload file" });
-    } 
+      return res.status(400).json({ error: "pdf_url or file required" });
+    }
 
     const { data: job, error: jobError } = await supabase
       .from("jobs")
@@ -152,21 +152,19 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
       .single();
 
     if (jobError) throw jobError;
-
     const job_id = job.id;
-    
+
     let buffer;
 
-    //CASE 1: File upload
+    // If file uploaded
     if (req.file) {
-	buffer = req.file.buffer;
-    }
-
-    //CASE 2: URL download
-    if (pdf_url) {
-	const respinse = await fetch(pdf_url);
-	if (!response.ok) throw new Error("PDF download failed");
-	buffer = Buffer.from(await response.arrayBuffer());
+      buffer = req.file.buffer;
+    } 
+    // Else fetch from URL
+    else {
+      const response = await fetch(pdf_url);
+      if (!response.ok) throw new Error("PDF download failed");
+      buffer = Buffer.from(await response.arrayBuffer());
     }
 
     const parsed = await pdfParse(buffer);
@@ -193,6 +191,7 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
+
 
 // ================== GENERATE AUDIO ==================
 
