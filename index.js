@@ -5,6 +5,8 @@ const express = require("express");
 const pdfParse = require("pdf-parse");
 const { createClient } = require("@supabase/supabase-js");
 const cors = require("cors");
+const multer = require("multer");
+const upload = multer();
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -135,27 +137,39 @@ async function synthesizeSpeech(text, filename) {
 
 // ================== PARSE ==================
 
-app.post("/parse", async (req, res) => {
+app.post("/parse", upload.single("pdf"), async (req, res) => {
   try {
     const { pdf_url } = req.body;
-    if (!pdf_url) {
-      return res.status(400).json({ error: "pdf_url required" });
-    }
+    
+    if (!pdf_url && !req.file) {
+      return res.status(400).json({ error: "Provide pdf_url or upload file" });
+    } 
 
-    const { data: job } = await supabase
+    const { data: job, error: jobError } = await supabase
       .from("jobs")
       .insert({ status: "processing" })
       .select()
       .single();
 
+    if (jobError) throw jobError;
+
     const job_id = job.id;
+    
+    let buffer;
 
-    const response = await fetch(pdf_url);
-    if (!response.ok) throw new Error("PDF download failed");
+    //CASE 1: File upload
+    if (req.file) {
+	buffer = req.file.buffer;
+    }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
+    //CASE 2: URL download
+    if (pdf_url) {
+	const respinse = await fetch(pdf_url);
+	if (!response.ok) throw new Error("PDF download failed");
+	buffer = Buffer.from(await response.arrayBuffer());
+    }
+
     const parsed = await pdfParse(buffer);
-
     if (!parsed.text) throw new Error("Text extraction failed");
 
     const script = buildExecutiveScript(parsed.text);
