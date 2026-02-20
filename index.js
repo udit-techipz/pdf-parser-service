@@ -66,6 +66,7 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
     }
 
     const parsed = await pdfParse(buffer);
+    console.log("Extracted text lenght:" parsed.text.length);
     if (!parsed.text) throw new Error("Text extraction failed");
 
     const script = buildExecutiveScript(parsed.text);
