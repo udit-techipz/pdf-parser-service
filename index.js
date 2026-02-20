@@ -139,59 +139,48 @@ async function synthesizeSpeech(text, filename) {
 
 app.post("/parse", upload.single("pdf"), async (req, res) => {
   try {
-    const { pdf_url } = req.body;
-
-    if (!pdf_url && !req.file) {
-      return res.status(400).json({ error: "pdf_url or file required" });
-    }
-
-    const { data: job, error: jobError } = await supabase
-      .from("jobs")
-      .insert({ status: "processing" })
-      .select()
-      .single();
-
-    if (jobError) throw jobError;
-    const job_id = job.id;
-
     let buffer;
 
-    // If file uploaded
     if (req.file) {
+      // Uploaded file
       buffer = req.file.buffer;
-    } 
-    // Else fetch from URL
-    else {
-      const response = await fetch(pdf_url);
+    } else if (req.body.pdf_url) {
+      // Public URL
+      const response = await fetch(req.body.pdf_url);
       if (!response.ok) throw new Error("PDF download failed");
       buffer = Buffer.from(await response.arrayBuffer());
+    } else {
+      return res.status(400).json({ error: "PDF file or URL required" });
     }
 
+    // Now parse buffer
     const parsed = await pdfParse(buffer);
     if (!parsed.text) throw new Error("Text extraction failed");
 
     const script = buildExecutiveScript(parsed.text);
 
-    await supabase
-      .from("jobs")
-      .update({
-        script,
-        status: "script_ready",
-      })
-      .eq("id", job_id);
+    const {data: job, error: jobError } = await supabase
+	.from("jobs")
+	.insert({
+	  script,
+	  status: "script_ready"
+	})
+	.select()
+	.single();
+
+    if (jobError) throw jobError;
 
     return res.json({
-      ok: true,
-      job_id,
-      estimated_minutes: 25,
+	ok.true,
+	job_id: job_id,
+	estimated minutes: 25
     });
 
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ ok: false, error: err.message });
-  }
+    } catch (err) {
+      console.error("PARSE ERROR:", err);
+      return res.status(500).json({ ok: false, error:err.message });
+    }
 });
-
 
 // ================== GENERATE AUDIO ==================
 
