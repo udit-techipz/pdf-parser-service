@@ -5,7 +5,9 @@ const { createClient } = require("@supabase/supabase-js");
 const cors = require("cors");
 const multer = require("multer");
 
-const upload = multer();
+const upload = multer({
+  limits: { filesize: 50 * 1024 * 1024 } // 50MB
+});
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
