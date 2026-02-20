@@ -66,9 +66,8 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
     }
 
     const parsed = await pdfParse(buffer);
-    console.log("Extracted text lenght:" parsed.text.length);
-    if (!parsed.text) throw new Error("PDF doesn't contain extractable text.");
-
+    console.log("Extracted text lenght:", parsed.text.length);
+    
     const script = buildExecutiveScript(parsed.text);
 
     const { data: job } = await supabase
