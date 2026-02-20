@@ -67,20 +67,15 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
     const parsed = await pdfParse(buffer);
     console.log("Extracted text lenght:" parsed.text.length);
-    if (!parsed.text) throw new Error("Text extraction failed");
+    if (!parsed.text) throw new Error("PDF doesn't contain extractable text.");
 
     const script = buildExecutiveScript(parsed.text);
 
-    const { data: job, error: jobError } = await supabase
+    const { data: job } = await supabase
       .from("jobs")
-      .insert({
-        script,
-        status: "script_ready"
-      })
+      .insert({ status: "script_ready", script })
       .select()
       .single();
-
-    if (jobError) throw jobError;
 
     return res.json({
       ok: true,
