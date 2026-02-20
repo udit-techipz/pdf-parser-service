@@ -50,8 +50,10 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
     // Case 1: file upload
     if (req.file) {
+      console.log ("Upload file size:", req.file.size);
       buffer = req.file.buffer;
     }
+
 
     // Case 2: URL provided
     else if (req.body.pdf_url) {
