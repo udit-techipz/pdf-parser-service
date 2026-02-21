@@ -78,17 +78,7 @@ Book Content:
 ${trimmed}
 `;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "You are a high-level executive editor." },
-      { role: "user", content: prompt }
-    ],
-    temperature: 0.4,
-    max_tokens: 6000
-  });
-
-  return response.choices[0].message.content;
+   return response.choices[0].message.content;
 }
 
 
