@@ -9,12 +9,6 @@ const upload = multer({
   limits: { filesize: 50 * 1024 * 1024 } // 50MB
 });
 
-const OpenAI = require("opernai");
-
-const openai = new OpenAI({
-  apikey: process.env.OPENAI_API_KEY,
-});
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
