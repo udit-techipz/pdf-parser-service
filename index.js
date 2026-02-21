@@ -38,43 +38,6 @@ End of briefing.
 `;
 }
 
-const cleaned = text
-    .replace(/Page \d+/gi, "")
-    .replace(/\n{2,}/g, "\n")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  // Limit input to prevent token explosion
-  const trimmed = cleaned.slice(0, 60000);
-
-  const prompt = `
-You are an executive synthesis engine.
-
-Transform the following book content into a 30–40 minute strategic executive briefing.
-
-Rules:
-- Remove narrative storytelling.
-- Remove repetition.
-- Remove chapter references.
-- Focus only on conceptual frameworks, principles, and strategic implications.
-- Rewrite in a confident executive tone.
-- Structure into 4 sections:
-  1. Core Thesis
-  2. Structural Principles
-  3. Strategic Implications
-  4. Execution Framework
-- End with a reflective closing question.
-- Do not quote the book directly.
-- Do not summarize chapter by chapter.
-- Write as a cohesive narrative.
-
-Book Content:
-${trimmed}
-`;
-
-   return response.choices[0].message.content;
-
-
 // ================= PARSE ROUTE =================
 
 app.post("/parse", upload.single("pdf"), async (req, res) => {
