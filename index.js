@@ -32,17 +32,73 @@ function buildExecutiveScript(text) {
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  const trimmed = cleaned.slice(0, 90000);
+  // Split into meaningful paragraphs
+  const paragraphs = cleaned
+    .split(/\n/)
+    .map(p => p.trim())
+    .filter(p => p.length > 300);
+
+  // Intelligent compression:
+  // Take spaced samples instead of first 90k characters
+  const total = paragraphs.length;
+  const selected = [];
+
+  const targetSections = 40; // ~30–40 minute output
+  const step = Math.floor(total / targetSections);
+
+  for (let i = 0; i < total; i += step) {
+    selected.push(paragraphs[i]);
+    if (selected.length >= targetSections) break;
+  }
+
+  const body = selected.join("\n\n");
 
   return `
 Executive Briefing
 
-${trimmed}
+This session distills the strategic architecture of the book into a structured executive synthesis.
+
+-----------------------------------------------------
+
+PART 1 — Core Thesis
+
+At its foundation, the book advances the following central argument:
+
+${body.slice(0, 6000)}
+
+-----------------------------------------------------
+
+PART 2 — Structural Principles
+
+The recurring patterns and frameworks can be understood as:
+
+${body.slice(6000, 14000)}
+
+-----------------------------------------------------
+
+PART 3 — Strategic Implications
+
+For decision-making, leadership, and performance, the implications are:
+
+${body.slice(14000, 22000)}
+
+-----------------------------------------------------
+
+PART 4 — Execution Blueprint
+
+To translate insight into measurable progress:
+
+${body.slice(22000)}
+
+-----------------------------------------------------
+
+Closing Reflection:
+
+Which principle, if implemented immediately, would create disproportionate leverage in your life or work?
 
 End of briefing.
 `;
 }
-
 
 // ================= PARSE ROUTE =================
 
