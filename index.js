@@ -32,7 +32,7 @@ app.get("/health", (_req, res) => {
 // ================= SCRIPT GENERATOR =================
 
 async function buildExecutiveScriptLLM(text) {
-  return '
+  return  '
 Executive Strategic Briefing
 
 THIS IS A TEST SCRIPT FROM LLM.
