@@ -36,7 +36,7 @@ async function buildExecutiveScriptLLM(text) {
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  const trimmed = cleaned.slice(0, 60000);
+  const trimmed = cleaned.slice(0, 40000);
 
   const prompt = `
 You are an executive synthesis engine.
