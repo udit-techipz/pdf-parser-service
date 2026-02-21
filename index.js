@@ -79,7 +79,6 @@ ${trimmed}
 `;
 
    return response.choices[0].message.content;
-}
 
 
 // ================= PARSE ROUTE =================
