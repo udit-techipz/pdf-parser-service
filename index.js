@@ -32,17 +32,17 @@ app.get("/health", (_req, res) => {
 // ================= SCRIPT GENERATOR =================
 
 async function buildExecutiveScriptLLM(text) {
-  return  '
+  return `
 Executive Strategic Briefing
 
 THIS IS A TEST SCRIPT FROM LLM.
 
-If you hear this sentence in the audio ,
+If you hear this sentence in the audio,
 then the OpenAI synthesis layer is working.
 
 End of briefing.
-';
-}  
+`;
+}
 
 const cleaned = text
     .replace(/Page \d+/gi, "")
