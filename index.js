@@ -9,6 +9,12 @@ const upload = multer({
   limits: { filesize: 50 * 1024 * 1024 } // 50MB
 });
 
+const OpenAI = require("opernai");
+
+const openai = new OpenAI({
+  apikey: process.env.OPENAI_API_KEY,
+});
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -25,80 +31,66 @@ app.get("/health", (_req, res) => {
 
 // ================= SCRIPT GENERATOR =================
 
-function buildExecutiveScript(text) {
-  const cleaned = text
+async function buildExecutiveScriptLLM(text) {
+  return '
+Executive Strategic Briefing
+
+THIS IS A TEST SCRIPT FROM LLM.
+
+If you hear this sentence in the audio ,
+then the OpenAI synthesis layer is working.
+
+End of briefing.
+';
+}  
+
+const cleaned = text
     .replace(/Page \d+/gi, "")
     .replace(/\n{2,}/g, "\n")
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  // Split into meaningful paragraphs
-  const paragraphs = cleaned
-    .split(/\n/)
-    .map(p => p.trim())
-    .filter(p => p.length > 300);
+  // Limit input to prevent token explosion
+  const trimmed = cleaned.slice(0, 60000);
 
-  // Intelligent compression:
-  // Take spaced samples instead of first 90k characters
-  const total = paragraphs.length;
-  const selected = [];
+  const prompt = `
+You are an executive synthesis engine.
 
-  const targetSections = 40; // ~30–40 minute output
-  const step = Math.floor(total / targetSections);
+Transform the following book content into a 30–40 minute strategic executive briefing.
 
-  for (let i = 0; i < total; i += step) {
-    selected.push(paragraphs[i]);
-    if (selected.length >= targetSections) break;
-  }
+Rules:
+- Remove narrative storytelling.
+- Remove repetition.
+- Remove chapter references.
+- Focus only on conceptual frameworks, principles, and strategic implications.
+- Rewrite in a confident executive tone.
+- Structure into 4 sections:
+  1. Core Thesis
+  2. Structural Principles
+  3. Strategic Implications
+  4. Execution Framework
+- End with a reflective closing question.
+- Do not quote the book directly.
+- Do not summarize chapter by chapter.
+- Write as a cohesive narrative.
 
-  const body = selected.join("\n\n");
-
-  return `
-Executive Briefing
-
-This session distills the strategic architecture of the book into a structured executive synthesis.
-
------------------------------------------------------
-
-PART 1 — Core Thesis
-
-At its foundation, the book advances the following central argument:
-
-${body.slice(0, 6000)}
-
------------------------------------------------------
-
-PART 2 — Structural Principles
-
-The recurring patterns and frameworks can be understood as:
-
-${body.slice(6000, 14000)}
-
------------------------------------------------------
-
-PART 3 — Strategic Implications
-
-For decision-making, leadership, and performance, the implications are:
-
-${body.slice(14000, 22000)}
-
------------------------------------------------------
-
-PART 4 — Execution Blueprint
-
-To translate insight into measurable progress:
-
-${body.slice(22000)}
-
------------------------------------------------------
-
-Closing Reflection:
-
-Which principle, if implemented immediately, would create disproportionate leverage in your life or work?
-
-End of briefing.
+Book Content:
+${trimmed}
 `;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are a high-level executive editor." },
+      { role: "user", content: prompt }
+    ],
+    temperature: 0.4,
+    max_tokens: 6000
+  });
+
+  return response.choices[0].message.content;
 }
+
 
 // ================= PARSE ROUTE =================
 
@@ -136,7 +128,7 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
     console.log("Extracted text lenght:", parsed.text.length);
     
-    const script = buildExecutiveScript(parsed.text);
+    const script = await buildExecutiveScriptLLM(parsed.text);
 
     const { data: job } = await supabase
       .from("jobs")
