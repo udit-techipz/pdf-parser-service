@@ -70,6 +70,14 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
     }
 
     const parsed = await pdfParse(buffer);
+
+    if (!parsed.text || parsed.text.length < 5000) {
+  return res.status(400).json({
+    ok: false,
+    error: "This PDF appears to be scanned or contains insufficient selectable text. Please upload a text-based PDF."
+  });
+}   
+
     console.log("Extracted text lenght:", parsed.text.length);
     
     const script = buildExecutiveScript(parsed.text);
