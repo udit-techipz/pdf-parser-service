@@ -92,9 +92,10 @@ async function callLLMWithFallback(prompt) {
 // ================= PROVIDER CALLS =================
 
 async function callGemini(prompt) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  const models = await genAI.listModels(};
+  console.log("AVAILABLE GEMINI MODELS:");
+  models.forEach(m => console.log(m.name));
+  throw new Error("Model listing complete");
 }
 
 async function callGroq(prompt) {
