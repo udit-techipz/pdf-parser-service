@@ -10,9 +10,10 @@
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.39.5",
     "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
     "express": "^4.19.0",
     "multer": "^2.0.2",
-    "openai": "^4.28.0",
+    "openai": "^4.104.0",
     "pdf-parse": "^1.1.1"
   }
 }

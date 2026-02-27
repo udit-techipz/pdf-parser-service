@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const fetch = global.fetch;
 const express = require("express");
 const pdfParse = require("pdf-parse");
@@ -5,27 +7,128 @@ const { createClient } = require("@supabase/supabase-js");
 const cors = require("cors");
 const multer = require("multer");
 const OpenAI = require("openai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-const upload = multer({
-  limits: { fileSize: 50 * 1024 * 1024 }
+// ================= ENV CHECK =================
+
+console.log("ENV CHECK:");
+console.log("OPENAI:", process.env.OPENAI_API_KEY ? "OK" : "MISSING");
+console.log("GEMINI:", process.env.GEMINI_API_KEY ? "OK" : "MISSING");
+console.log("GROQ:", process.env.GROQ_API_KEY ? "OK" : "MISSING");
+console.log("SUPABASE:", process.env.SUPABASE_URL ? "OK" : "MISSING");
+
+// ================= LLM PROVIDERS =================
+
+// OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Groq (OpenAI-compatible)
+const groq = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1",
+});
+
+// ================= SUPABASE =================
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// ================= EXPRESS =================
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+const upload = multer({
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
+
+// ================= LLM ROUTER =================
+
+async function callLLMWithFallback(prompt) {
+  // Gemini first, OpenAI last (as requested)
+  const providers = [
+    { name: "gemini", fn: () => callGemini(prompt) },
+    { name: "groq", fn: () => callGroq(prompt) },
+    { name: "openai", fn: () => callOpenAI(prompt) },
+  ];
+
+  for (const provider of providers) {
+    try {
+      console.log(`Trying provider: ${provider.name}`);
+      const result = await provider.fn();
+      console.log(`Success with: ${provider.name}`);
+      return result;
+
+    } catch (err) {
+      const message = (err?.message || "").toLowerCase();
+
+      const isQuotaOrRateLimit =
+        message.includes("rate limit") ||
+        message.includes("quota") ||
+        message.includes("429");
+
+      if (isQuotaOrRateLimit) {
+        console.log(`${provider.name} quota/rate limited. Trying next...`);
+        await new Promise(res => setTimeout(res, 1000));
+        continue;
+      }
+
+      console.log(`${provider.name} failed with non-rate error.`);
+      console.log(err);
+      throw err;
+    }
+  }
+
+  throw new Error("All LLM providers exhausted");
+}
+
+// ================= PROVIDER IMPLEMENTATIONS =================
+
+async function callGemini(prompt) {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const result = await model.generateContent(prompt);
+  return result.response.text();
+}
+
+async function callGroq(prompt) {
+  const response = await groq.chat.completions.create({
+    model: "llama3-70b-8192",
+    messages: [
+      { role: "system", content: "You are a high-level executive editor." },
+      { role: "user", content: prompt }
+    ],
+    temperature: 0.3,
+    max_tokens: 5000
+  });
+
+  return response.choices[0].message.content;
+}
+
+async function callOpenAI(prompt) {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are a high-level executive editor." },
+      { role: "user", content: prompt }
+    ],
+    temperature: 0.3,
+    max_tokens: 5000
+  });
+
+  return response.choices[0].message.content;
+}
 
 // ================= SCRIPT GENERATOR =================
 
@@ -61,17 +164,8 @@ Book Content:
 ${trimmed}
 `;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "You are a high-level executive editor." },
-      { role: "user", content: prompt }
-    ],
-    temperature: 0.3,
-    max_tokens: 5000
-  });
-
-  return response.choices[0].message.content;
+  const script = await callLLMWithFallback(prompt);
+  return script;
 }
 
 // ================= PARSE ROUTE =================
@@ -81,7 +175,6 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
     let buffer;
 
     if (req.file) {
-      console.log("Upload file size:", req.file.size);
       buffer = req.file.buffer;
     } else if (req.body.pdf_url) {
       const response = await fetch(req.body.pdf_url);
@@ -96,11 +189,9 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
     if (!parsed.text || parsed.text.length < 5000) {
       return res.status(400).json({
         ok: false,
-        error: "This PDF appears to be scanned or contains insufficient selectable text."
+        error: "PDF contains insufficient selectable text."
       });
     }
-
-    console.log("Extracted text length:", parsed.text.length);
 
     const script = await buildExecutiveScriptLLM(parsed.text);
 
@@ -118,124 +209,6 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
   } catch (err) {
     console.error("PARSE ERROR:", err);
-    return res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// ================= GENERATE AUDIO =================
-
-app.post("/generate-audio", async (req, res) => {
-  try {
-    const { job_id } = req.body;
-    if (!job_id) {
-      return res.status(400).json({ error: "job_id required" });
-    }
-
-    res.json({ ok: true, message: "Audio generation started" });
-
-    (async () => {
-      try {
-        const { data: job, error } = await supabase
-          .from("jobs")
-          .select("*")
-          .eq("id", job_id)
-          .single();
-
-        if (error) throw error;
-        if (!job.script) throw new Error("No script found");
-
-        await supabase
-          .from("jobs")
-          .update({ status: "audio_generating" })
-          .eq("id", job_id);
-
-        const CHUNK_SIZE = 4000;
-        const chunks = [];
-
-        for (let i = 0; i < job.script.length; i += CHUNK_SIZE) {
-          chunks.push(job.script.slice(i, i + CHUNK_SIZE));
-        }
-
-        let combinedBuffer = Buffer.alloc(0);
-
-        for (const chunk of chunks) {
-          const response = await fetch(
-            `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                input: { text: chunk },
-                voice: {
-                  languageCode: "en-US",
-                  name: "en-US-Neural2-D",
-                },
-                audioConfig: { audioEncoding: "MP3" },
-              }),
-            }
-          );
-
-          if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`TTS failed: ${err}`);
-          }
-
-          const data = await response.json();
-          const audioBuffer = Buffer.from(data.audioContent, "base64");
-          combinedBuffer = Buffer.concat([combinedBuffer, audioBuffer]);
-        }
-
-        const filename = `${job_id}/executive.mp3`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("audio")
-          .upload(filename, combinedBuffer, {
-            contentType: "audio/mpeg",
-            upsert: true,
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from("audio")
-          .getPublicUrl(filename);
-
-        await supabase
-          .from("jobs")
-          .update({
-            status: "audio_ready",
-            audio_url: publicUrlData.publicUrl,
-          })
-          .eq("id", job_id);
-
-      } catch (err) {
-        console.error("AUDIO ERROR:", err);
-        await supabase.from("jobs").update({ status: "failed" }).eq("id", job_id);
-      }
-    })();
-
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// ================= JOB STATUS =================
-
-app.get("/job-status/:job_id", async (req, res) => {
-  try {
-    const { job_id } = req.params;
-
-    const { data: job, error } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("id", job_id)
-      .single();
-
-    if (error) throw error;
-
-    return res.json({ ok: true, job });
-
-  } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
