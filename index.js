@@ -17,17 +17,14 @@ console.log("GEMINI:", process.env.GEMINI_API_KEY ? "OK" : "MISSING");
 console.log("GROQ:", process.env.GROQ_API_KEY ? "OK" : "MISSING");
 console.log("SUPABASE:", process.env.SUPABASE_URL ? "OK" : "MISSING");
 
-// ================= LLM PROVIDERS =================
+// ================= PROVIDERS =================
 
-// OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Groq (OpenAI-compatible)
 const groq = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
   baseURL: "https://api.groq.com/openai/v1",
@@ -57,7 +54,6 @@ app.get("/health", (_req, res) => {
 // ================= LLM ROUTER =================
 
 async function callLLMWithFallback(prompt) {
-  // Gemini first, OpenAI last (as requested)
   const providers = [
     { name: "gemini", fn: () => callGemini(prompt) },
     { name: "groq", fn: () => callGroq(prompt) },
@@ -70,16 +66,15 @@ async function callLLMWithFallback(prompt) {
       const result = await provider.fn();
       console.log(`Success with: ${provider.name}`);
       return result;
-
     } catch (err) {
       const message = (err?.message || "").toLowerCase();
 
-      const isQuotaOrRateLimit =
+      const isQuotaOrRate =
         message.includes("rate limit") ||
         message.includes("quota") ||
         message.includes("429");
 
-      if (isQuotaOrRateLimit) {
+      if (isQuotaOrRate) {
         console.log(`${provider.name} quota/rate limited. Trying next...`);
         await new Promise(res => setTimeout(res, 1000));
         continue;
@@ -94,7 +89,7 @@ async function callLLMWithFallback(prompt) {
   throw new Error("All LLM providers exhausted");
 }
 
-// ================= PROVIDER IMPLEMENTATIONS =================
+// ================= PROVIDER CALLS =================
 
 async function callGemini(prompt) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -147,12 +142,9 @@ You are an executive synthesis engine.
 Rewrite the following book content into a 30–40 minute strategic executive briefing.
 
 Rules:
-- Do NOT quote the original text.
-- Do NOT paraphrase sentence by sentence.
 - Abstract the concepts.
-- Remove storytelling and narrative examples.
-- Focus only on frameworks, principles, and strategic implications.
-- Write in confident executive tone.
+- Remove narrative examples.
+- Focus only on frameworks and strategic implications.
 - Structure into 4 sections:
   1. Core Thesis
   2. Structural Principles
@@ -164,8 +156,7 @@ Book Content:
 ${trimmed}
 `;
 
-  const script = await callLLMWithFallback(prompt);
-  return script;
+  return await callLLMWithFallback(prompt);
 }
 
 // ================= PARSE ROUTE =================
@@ -209,6 +200,114 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
   } catch (err) {
     console.error("PARSE ERROR:", err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ================= GENERATE AUDIO =================
+
+app.post("/generate-audio", async (req, res) => {
+  try {
+    const { job_id } = req.body;
+    if (!job_id) {
+      return res.status(400).json({ error: "job_id required" });
+    }
+
+    res.json({ ok: true });
+
+    (async () => {
+      try {
+        const { data: job } = await supabase
+          .from("jobs")
+          .select("*")
+          .eq("id", job_id)
+          .single();
+
+        if (!job.script) throw new Error("No script found");
+
+        await supabase
+          .from("jobs")
+          .update({ status: "audio_generating" })
+          .eq("id", job_id);
+
+        const CHUNK_SIZE = 4000;
+        const chunks = [];
+
+        for (let i = 0; i < job.script.length; i += CHUNK_SIZE) {
+          chunks.push(job.script.slice(i, i + CHUNK_SIZE));
+        }
+
+        let combinedBuffer = Buffer.alloc(0);
+
+        for (const chunk of chunks) {
+          const response = await fetch(
+            `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                input: { text: chunk },
+                voice: {
+                  languageCode: "en-US",
+                  name: "en-US-Neural2-D",
+                },
+                audioConfig: { audioEncoding: "MP3" },
+              }),
+            }
+          );
+
+          const data = await response.json();
+          const audioBuffer = Buffer.from(data.audioContent, "base64");
+          combinedBuffer = Buffer.concat([combinedBuffer, audioBuffer]);
+        }
+
+        const filename = `${job_id}/executive.mp3`;
+
+        await supabase.storage
+          .from("audio")
+          .upload(filename, combinedBuffer, {
+            contentType: "audio/mpeg",
+            upsert: true,
+          });
+
+        const { data: publicUrlData } = supabase.storage
+          .from("audio")
+          .getPublicUrl(filename);
+
+        await supabase
+          .from("jobs")
+          .update({
+            status: "audio_ready",
+            audio_url: publicUrlData.publicUrl,
+          })
+          .eq("id", job_id);
+
+      } catch (err) {
+        console.error("AUDIO ERROR:", err);
+        await supabase.from("jobs").update({ status: "failed" }).eq("id", job_id);
+      }
+    })();
+
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ================= JOB STATUS =================
+
+app.get("/job-status/:job_id", async (req, res) => {
+  try {
+    const { job_id } = req.params;
+
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", job_id)
+      .single();
+
+    return res.json({ ok: true, job });
+
+  } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
