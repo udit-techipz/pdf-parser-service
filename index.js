@@ -92,7 +92,7 @@ async function callLLMWithFallback(prompt) {
 // ================= PROVIDER CALLS =================
 
 async function callGemini(prompt) {
-  const models = await genAI.listModels(};
+  const models = await genAI.listModels();
   console.log("AVAILABLE GEMINI MODELS:");
   models.forEach(m => console.log(m.name));
   throw new Error("Model listing complete");
