@@ -195,6 +195,8 @@ const { content, provider } = await callLLMWithFallback(prompt);
 return {
   script: content,
   provider
+
+  console.log("Provider inside builder:", provider);
  };
 }
 // ================= PARSE ROUTE =================
