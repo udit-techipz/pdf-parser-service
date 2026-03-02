@@ -82,7 +82,11 @@ async function callLLMWithFallback(prompt) {
       console.log(`Trying provider: ${provider.name}`);
       const result = await withTimeout(provider.fn(), 45000);
       console.log(`Success with: ${provider.name}`);
-      return result;
+
+      return {
+        content: result,
+        provider: provider.name
+      };
 
     } catch (err) {
       const message = (err?.message || "").toLowerCase();
@@ -103,8 +107,6 @@ async function callLLMWithFallback(prompt) {
         continue;
       }
 
-      console.log(`${provider.name} failed with non-retryable error.`);
-      console.error(err);
       throw err;
     }
   }
@@ -188,7 +190,11 @@ Book Content:
 ${trimmed}
 `;
 
-  return await callLLMWithFallback(prompt);
+const { content, provider } = await callLLMWithFallback(prompt);
+
+return {
+  script: content,
+  provider
 }
 
 // ================= PARSE ROUTE =================
@@ -216,11 +222,16 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
       });
     }
 
-    const script = await buildExecutiveScriptLLM(parsed.text);
+   const { script, provider } =
+     await buildExecutiveScriptLLM(parsed.text);
 
     const { data: job } = await supabase
       .from("jobs")
-      .insert({ status: "script_ready", script })
+      .insert({
+ 	 status: "script_ready",
+ 	 script,
+ 	 provider_used: provider
+	})
       .select()
       .single();
 
