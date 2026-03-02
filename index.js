@@ -168,37 +168,28 @@ async function buildExecutiveScriptLLM(text) {
       ? cleaned.slice(0, MAX_CHARS)
       : cleaned;
 
-  console.log("Trimmed length:", trimmed.length);
-
   const prompt = `
 You are an executive synthesis engine.
-
 Rewrite the following book content into a 30–40 minute strategic executive briefing.
-
-Rules:
-- Abstract the concepts.
-- Remove narrative examples.
-- Focus only on frameworks and strategic implications.
-- Structure into 4 sections:
-  1. Core Thesis
-  2. Structural Principles
-  3. Strategic Implications
-  4. Execution Framework
-- End with one reflective closing question.
+Structure into:
+1. Core Thesis
+2. Structural Principles
+3. Strategic Implications
+4. Execution Framework
+End with one reflective question.
 
 Book Content:
 ${trimmed}
 `;
 
-const { content, provider } = await callLLMWithFallback(prompt);
+  const llmResult = await callLLMWithFallback(prompt);
 
-return {
-  script: content,
-  provider
-
-  console.log("Provider inside builder:", provider);
- };
+  return {
+    script: llmResult.content,
+    provider: llmResult.provider
+  };
 }
+
 // ================= PARSE ROUTE =================
 
 app.post("/parse", upload.single("pdf"), async (req, res) => {
