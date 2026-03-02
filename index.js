@@ -1,6 +1,5 @@
 require("dotenv").config();
 
-const fetch = global.fetch;
 const express = require("express");
 const pdfParse = require("pdf-parse");
 const { createClient } = require("@supabase/supabase-js");
@@ -8,6 +7,8 @@ const cors = require("cors");
 const multer = require("multer");
 const OpenAI = require("openai");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const fetch = global.fetch;
 
 // ================= ENV CHECK =================
 
@@ -47,9 +48,25 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+// ================= HEALTH =================
+
+app.get("/health", async (_req, res) => {
+  try {
+    await supabase.from("jobs").select("id").limit(1);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
 });
+
+// ================= TIMEOUT HELPER =================
+
+async function withTimeout(promise, ms) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("LLM timeout")), ms)
+  );
+  return Promise.race([promise, timeout]);
+}
 
 // ================= LLM ROUTER =================
 
@@ -63,25 +80,31 @@ async function callLLMWithFallback(prompt) {
   for (const provider of providers) {
     try {
       console.log(`Trying provider: ${provider.name}`);
-      const result = await provider.fn();
+      const result = await withTimeout(provider.fn(), 45000);
       console.log(`Success with: ${provider.name}`);
       return result;
+
     } catch (err) {
       const message = (err?.message || "").toLowerCase();
+      const status = err?.status || err?.response?.status;
 
-      const isQuotaOrRate =
-        message.includes("rate limit") ||
+      const isRetryable =
+        status === 429 ||
+        status === 500 ||
+        status === 503 ||
+        message.includes("rate") ||
         message.includes("quota") ||
-        message.includes("429");
+        message.includes("overloaded") ||
+        message.includes("timeout");
 
-      if (isQuotaOrRate) {
-        console.log(`${provider.name} quota/rate limited. Trying next...`);
+      if (isRetryable) {
+        console.log(`${provider.name} retryable failure. Trying next...`);
         await new Promise(res => setTimeout(res, 1000));
         continue;
       }
 
-      console.log(`${provider.name} failed with non-rate error.`);
-      console.log(err);
+      console.log(`${provider.name} failed with non-retryable error.`);
+      console.error(err);
       throw err;
     }
   }
@@ -108,7 +131,7 @@ async function callGroq(prompt) {
       { role: "user", content: prompt }
     ],
     temperature: 0.3,
-    max_tokens: 5000
+    max_tokens: 4000
   });
 
   return response.choices[0].message.content;
@@ -122,7 +145,7 @@ async function callOpenAI(prompt) {
       { role: "user", content: prompt }
     ],
     temperature: 0.3,
-    max_tokens: 5000
+    max_tokens: 4000
   });
 
   return response.choices[0].message.content;
@@ -137,7 +160,13 @@ async function buildExecutiveScriptLLM(text) {
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  const trimmed = cleaned.slice(0, 40000);
+  const MAX_CHARS = 60000;
+  const trimmed =
+    cleaned.length > MAX_CHARS
+      ? cleaned.slice(0, MAX_CHARS)
+      : cleaned;
+
+  console.log("Trimmed length:", trimmed.length);
 
   const prompt = `
 You are an executive synthesis engine.
@@ -226,7 +255,8 @@ app.post("/generate-audio", async (req, res) => {
           .eq("id", job_id)
           .single();
 
-        if (!job.script) throw new Error("No script found");
+        if (!job || !job.script) throw new Error("No script found");
+        if (job.status === "audio_ready") return;
 
         await supabase
           .from("jobs")
@@ -258,6 +288,11 @@ app.post("/generate-audio", async (req, res) => {
               }),
             }
           );
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`TTS failed: ${errText}`);
+          }
 
           const data = await response.json();
           const audioBuffer = Buffer.from(data.audioContent, "base64");
@@ -315,11 +350,20 @@ app.get("/job-status/:job_id", async (req, res) => {
   }
 });
 
+// ================= GLOBAL CRASH GUARDS =================
+
+process.on("unhandledRejection", (err) => {
+  console.error("UNHANDLED REJECTION:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+  process.exit(1);
+});
+
 // ================= START =================
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Executive parser running on port ${PORT}`);
-});          //   r e d e p l o y   t r i g g e r 
- 
- 
+});
