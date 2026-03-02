@@ -195,8 +195,8 @@ const { content, provider } = await callLLMWithFallback(prompt);
 return {
   script: content,
   provider
+ };
 }
-
 // ================= PARSE ROUTE =================
 
 app.post("/parse", upload.single("pdf"), async (req, res) => {
