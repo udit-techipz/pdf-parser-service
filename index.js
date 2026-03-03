@@ -168,15 +168,46 @@ async function buildExecutiveScriptLLM(text) {
       ? cleaned.slice(0, MAX_CHARS)
       : cleaned;
 
-  const prompt = `
-You are an executive synthesis engine.
-Rewrite the following book content into a 30–40 minute strategic executive briefing.
-Structure into:
-1. Core Thesis
-2. Structural Principles
-3. Strategic Implications
-4. Execution Framework
-End with one reflective question.
+const prompt = `
+You are advising a CEO in a closed-door strategy session.
+
+Transform the following book content into a high-level executive briefing.
+
+This is not a summary.
+
+Your job is to extract the governing strategic logic behind the material.
+
+Requirements:
+
+• Identify the core governing thesis.
+• Distill repeatable mental models and operating systems.
+• Surface hidden assumptions embedded in the ideas.
+• Expose trade-offs and second-order effects.
+• Translate insights into decision implications for capital allocation, hiring, risk tolerance, and strategic focus.
+• Where appropriate, quantify impact or risk directionally.
+
+Tone constraints:
+
+• Analytical — structured, logical, no emotional language.
+• Decisive — take positions; avoid hedging.
+• Provocative — challenge conventional thinking, but without theatrics.
+• No storytelling.
+• No inspirational tone.
+• No rhetorical fluff.
+
+Structure the briefing as:
+
+1. Core Strategic Thesis  
+2. Structural Logic & Frameworks  
+3. Decision Implications  
+4. Organizational Consequences  
+5. One uncomfortable question leadership must confront
+
+Use short paragraphs.
+Keep sentences under 20 words.
+Avoid multi-clause constructions.
+
+Assume the audience is intelligent, time-constrained, and intolerant of vagueness.
 
 Book Content:
 ${trimmed}
@@ -286,9 +317,13 @@ app.post("/generate-audio", async (req, res) => {
                 input: { text: chunk },
                 voice: {
                   languageCode: "en-US",
-                  name: "en-US-Neural2-D",
+                  name: "en-US-Neural2-J",
                 },
-                audioConfig: { audioEncoding: "MP3" },
+                audioConfig: {
+		  audioEncoding: "MP3",
+		  speakingRate: 0.92,
+		  pitch: -1.0
+		}
               }),
             }
           );
