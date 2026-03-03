@@ -307,12 +307,12 @@ app.post("/generate-audio", async (req, res) => {
             input: { text: chunk },
             voice: {
               languageCode: "en-US",
-              name: "en-US-Neural2-J",
+              name: "en-US-Studio-O",
             },
             audioConfig: {
               audioEncoding: "MP3",
-              speakingRate: 0.92,
-              pitch: -1.0
+              speakingRate: 0.95,
+              pitch: -0.5
             }
           }),
         }
