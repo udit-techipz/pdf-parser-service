@@ -158,7 +158,45 @@ async function buildExecutiveScriptLLM(text) {
       ? cleaned.slice(0, MAX_CHARS)
       : cleaned;
 
-  const prompt = `... your full strategic prompt here ...`;
+  const prompt = `
+You are speaking to senior executives in a closed-door strategy session.
+
+Deliver a strategic executive briefing as spoken speech — not a written document.
+
+Do not structure this as sections.
+Do not use headings.
+Do not number points.
+Do not reference a book, author, or text.
+Do not narrate structure.
+
+Speak continuously, as if addressing a leadership team directly.
+
+The tone must be:
+• Analytical
+• Decisive
+• Provocative (intellectually challenging, not dramatic)
+
+Avoid:
+• "First", "Second", "In conclusion"
+• "This section"
+• "The book argues"
+• Any reference to formatting or structure
+
+Favor:
+• Direct declarative statements
+• Clear logical progression
+• Short paragraphs
+• Sentences under 20 words
+
+Minimum length requirement:
+Deliver at least 4,500 words.
+Expand depth if necessary.
+
+Assume your audience is intelligent, skeptical, and time-constrained.
+
+Book Content:
+${trimmed}
+`;
 
   const llmResult = await callLLMWithFallback(prompt);
 
@@ -222,9 +260,6 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 function sanitizeForTTS(text) {
   return text
     .replace(/[*_#•]/g, "")                 // remove markdown/bullets
-    .replace(/\d+\.\s+/g, "")               // remove numbered headings
-    .replace(/\n{2,}/g, ". ")               // paragraph breaks -> pause
-    .replace(/\n/g, " ")                    // single line breaks
     .replace(/\s+/g, " ")                   // normalize spacing
     .trim();
 }
