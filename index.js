@@ -168,8 +168,12 @@ Do not use headings.
 Do not number points.
 Do not reference a book, author, or text.
 Do not narrate structure.
+Begin directly with “Hello.”
+Do not use time-based greetings such as “Good morning” or “Good afternoon.”
+Do not include pleasantries.
 
 Speak continuously, as if addressing a leadership team directly.
+Vary sentence length naturally to support spoken delivery.
 
 The tone must be:
 • Analytical
@@ -311,8 +315,8 @@ app.post("/generate-audio", async (req, res) => {
             },
             audioConfig: {
               audioEncoding: "MP3",
-              speakingRate: 0.95,
-              pitch: -0.5
+              speakingRate: 0.96,
+              pitch: -0.3
             }
           }),
         }
