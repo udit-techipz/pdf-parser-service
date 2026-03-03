@@ -221,7 +221,6 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
 require("dotenv").config();
 
-const express = require("express");
 const pdfParse = require("pdf-parse");
 const { createClient } = require("@supabase/supabase-js");
 const cors = require("cors");
