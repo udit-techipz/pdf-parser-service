@@ -389,6 +389,7 @@ app.post("/generate-audio", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
+console.log("Audio requested for job_id:", job_id);
 });
 
 // ================= JOB STATUS =================
