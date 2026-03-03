@@ -121,8 +121,13 @@ async function callGemini(prompt) {
     model: "gemini-2.5-flash"
   });
 
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  const result = await model.generateContent({
+  contents: [{ role: "user", parts: [{ text: prompt }] }],
+  generationConfig: {
+    maxOutputTokens: 8000,
+    temperature: 0.4
+  }
+});
 }
 
 async function callGroq(prompt) {
@@ -186,6 +191,10 @@ Requirements:
 • Translate insights into decision implications for capital allocation, hiring, risk tolerance, and strategic focus.
 • Where appropriate, quantify impact or risk directionally.
 
+Minimum length requirement:
+• Produce at least 4,500 words.
+• If under that threshold, expand depth and implications.
+
 Tone constraints:
 
 • Analytical — structured, logical, no emotional language.
@@ -194,6 +203,17 @@ Tone constraints:
 • No storytelling.
 • No inspirational tone.
 • No rhetorical fluff.
+
+Critical constraint:
+
+• Do NOT refer to "the book", "the author", or "the text".
+• Do NOT describe what was written.
+• Do NOT narrate.
+
+Speak as if these ideas are strategic conclusions,
+not commentary on a book.
+
+This is an internal strategic memo, not a review.
 
 Structure the briefing as:
 
@@ -219,6 +239,7 @@ ${trimmed}
     script: llmResult.content,
     provider: llmResult.provider
   };
+console.log("Script length:", script.length);
 }
 
 // ================= PARSE ROUTE =================
