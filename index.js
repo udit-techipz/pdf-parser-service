@@ -10,14 +10,6 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const fetch = global.fetch;
 
-// ================= ENV CHECK =================
-
-console.log("ENV CHECK:");
-console.log("OPENAI:", process.env.OPENAI_API_KEY ? "OK" : "MISSING");
-console.log("GEMINI:", process.env.GEMINI_API_KEY ? "OK" : "MISSING");
-console.log("GROQ:", process.env.GROQ_API_KEY ? "OK" : "MISSING");
-console.log("SUPABASE:", process.env.SUPABASE_URL ? "OK" : "MISSING");
-
 // ================= PROVIDERS =================
 
 const openai = new OpenAI({
@@ -59,7 +51,7 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// ================= TIMEOUT HELPER =================
+// ================= TIMEOUT =================
 
 async function withTimeout(promise, ms) {
   const timeout = new Promise((_, reject) =>
@@ -79,15 +71,11 @@ async function callLLMWithFallback(prompt) {
 
   for (const provider of providers) {
     try {
-      console.log(`Trying provider: ${provider.name}`);
       const result = await withTimeout(provider.fn(), 45000);
-      console.log(`Success with: ${provider.name}`);
-
       return {
         content: result,
         provider: provider.name
       };
-
     } catch (err) {
       const message = (err?.message || "").toLowerCase();
       const status = err?.status || err?.response?.status;
@@ -98,14 +86,9 @@ async function callLLMWithFallback(prompt) {
         status === 503 ||
         message.includes("rate") ||
         message.includes("quota") ||
-        message.includes("overloaded") ||
         message.includes("timeout");
 
-      if (isRetryable) {
-        console.log(`${provider.name} retryable failure. Trying next...`);
-        await new Promise(res => setTimeout(res, 1000));
-        continue;
-      }
+      if (isRetryable) continue;
 
       throw err;
     }
@@ -122,12 +105,14 @@ async function callGemini(prompt) {
   });
 
   const result = await model.generateContent({
-  contents: [{ role: "user", parts: [{ text: prompt }] }],
-  generationConfig: {
-    maxOutputTokens: 8000,
-    temperature: 0.4
-  }
-});
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      maxOutputTokens: 8000,
+      temperature: 0.4
+    }
+  });
+
+  return result.response.text();
 }
 
 async function callGroq(prompt) {
@@ -173,65 +158,7 @@ async function buildExecutiveScriptLLM(text) {
       ? cleaned.slice(0, MAX_CHARS)
       : cleaned;
 
-const prompt = `
-You are advising a CEO in a closed-door strategy session.
-
-Transform the following book content into a high-level executive briefing.
-
-This is not a summary.
-
-Your job is to extract the governing strategic logic behind the material.
-
-Requirements:
-
-• Identify the core governing thesis.
-• Distill repeatable mental models and operating systems.
-• Surface hidden assumptions embedded in the ideas.
-• Expose trade-offs and second-order effects.
-• Translate insights into decision implications for capital allocation, hiring, risk tolerance, and strategic focus.
-• Where appropriate, quantify impact or risk directionally.
-
-Minimum length requirement:
-• Produce at least 4,500 words.
-• If under that threshold, expand depth and implications.
-
-Tone constraints:
-
-• Analytical — structured, logical, no emotional language.
-• Decisive — take positions; avoid hedging.
-• Provocative — challenge conventional thinking, but without theatrics.
-• No storytelling.
-• No inspirational tone.
-• No rhetorical fluff.
-
-Critical constraint:
-
-• Do NOT refer to "the book", "the author", or "the text".
-• Do NOT describe what was written.
-• Do NOT narrate.
-
-Speak as if these ideas are strategic conclusions,
-not commentary on a book.
-
-This is an internal strategic memo, not a review.
-
-Structure the briefing as:
-
-1. Core Strategic Thesis  
-2. Structural Logic & Frameworks  
-3. Decision Implications  
-4. Organizational Consequences  
-5. One uncomfortable question leadership must confront
-
-Use short paragraphs.
-Keep sentences under 20 words.
-Avoid multi-clause constructions.
-
-Assume the audience is intelligent, time-constrained, and intolerant of vagueness.
-
-Book Content:
-${trimmed}
-`;
+  const prompt = `... your full strategic prompt here ...`;
 
   const llmResult = await callLLMWithFallback(prompt);
 
@@ -239,10 +166,9 @@ ${trimmed}
     script: llmResult.content,
     provider: llmResult.provider
   };
-console.log("Script length:", script.length);
 }
 
-// ================= PARSE ROUTE =================
+// ================= PARSE =================
 
 app.post("/parse", upload.single("pdf"), async (req, res) => {
   try {
@@ -267,16 +193,16 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
       });
     }
 
-   const { script, provider } =
-     await buildExecutiveScriptLLM(parsed.text);
+    const { script, provider } =
+      await buildExecutiveScriptLLM(parsed.text);
 
     const { data: job } = await supabase
       .from("jobs")
       .insert({
- 	 status: "script_ready",
- 	 script,
- 	 provider_used: provider
-	})
+        status: "script_ready",
+        script,
+        provider_used: provider
+      })
       .select()
       .single();
 
@@ -287,7 +213,6 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
     });
 
   } catch (err) {
-    console.error("PARSE ERROR:", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -319,7 +244,7 @@ app.post("/generate-audio", async (req, res) => {
           .update({ status: "audio_generating" })
           .eq("id", job_id);
 
-        const CHUNK_SIZE = 4000;
+        const CHUNK_SIZE = 3000;
         const chunks = [];
 
         for (let i = 0; i < job.script.length; i += CHUNK_SIZE) {
@@ -341,10 +266,10 @@ app.post("/generate-audio", async (req, res) => {
                   name: "en-US-Neural2-J",
                 },
                 audioConfig: {
-		  audioEncoding: "MP3",
-		  speakingRate: 0.92,
-		  pitch: -1.0
-		}
+                  audioEncoding: "MP3",
+                  speakingRate: 0.92,
+                  pitch: -1.0
+                }
               }),
             }
           );
@@ -381,7 +306,6 @@ app.post("/generate-audio", async (req, res) => {
           .eq("id", job_id);
 
       } catch (err) {
-        console.error("AUDIO ERROR:", err);
         await supabase.from("jobs").update({ status: "failed" }).eq("id", job_id);
       }
     })();
@@ -389,7 +313,6 @@ app.post("/generate-audio", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
-console.log("Audio requested for job_id:", job_id);
 });
 
 // ================= JOB STATUS =================
@@ -411,16 +334,10 @@ app.get("/job-status/:job_id", async (req, res) => {
   }
 });
 
-// ================= GLOBAL CRASH GUARDS =================
+// ================= CRASH GUARDS =================
 
-process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED REJECTION:", err);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION:", err);
-  process.exit(1);
-});
+process.on("unhandledRejection", () => {});
+process.on("uncaughtException", () => process.exit(1));
 
 // ================= START =================
 
