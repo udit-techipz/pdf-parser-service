@@ -117,7 +117,7 @@ async function callGemini(prompt) {
 
 async function callGroq(prompt) {
   const response = await groq.chat.completions.create({
-    model: "llama3-70b-8192",
+    model: "llama-3.3-70b-versatile",
     messages: [
       { role: "system", content: "You are a high-level executive editor." },
       { role: "user", content: prompt }
