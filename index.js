@@ -272,109 +272,95 @@ app.post("/generate-audio", async (req, res) => {
       return res.status(400).json({ error: "job_id required" });
     }
 
-    // Immediate response to frontend
-    res.json({ ok: true });
+    const { data: job, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", job_id)
+      .single();
 
-    (async () => {
-      try {
-        const { data: job, error } = await supabase
-          .from("jobs")
-          .select("*")
-          .eq("id", job_id)
-          .single();
+    if (error) throw error;
+    if (!job || !job.script) throw new Error("No script found");
 
-        if (error) throw error;
-        if (!job || !job.script) throw new Error("No script found");
-        if (job.status === "audio_ready") return;
+    await supabase
+      .from("jobs")
+      .update({ status: "audio_generating" })
+      .eq("id", job_id);
 
-        await supabase
-          .from("jobs")
-          .update({ status: "audio_generating" })
-          .eq("id", job_id);
+    const cleanScript = sanitizeForTTS(job.script);
 
-        // Clean text for speech
-        const cleanScript = sanitizeForTTS(job.script);
+    const CHUNK_SIZE = 2800;
+    const chunks = [];
 
-        const CHUNK_SIZE = 2800; // slightly conservative
-        const chunks = [];
+    for (let i = 0; i < cleanScript.length; i += CHUNK_SIZE) {
+      chunks.push(cleanScript.slice(i, i + CHUNK_SIZE));
+    }
 
-        for (let i = 0; i < cleanScript.length; i += CHUNK_SIZE) {
-          chunks.push(cleanScript.slice(i, i + CHUNK_SIZE));
-        }
+    let combinedBuffer = Buffer.alloc(0);
 
-        let combinedBuffer = Buffer.alloc(0);
-
-        for (const chunk of chunks) {
-          const response = await fetch(
-            `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                input: { text: chunk },
-                voice: {
-                  languageCode: "en-US",
-                  name: "en-US-Neural2-J",
-                },
-                audioConfig: {
-                  audioEncoding: "MP3",
-                  speakingRate: 0.92,
-                  pitch: -1.0
-                }
-              }),
+    for (const chunk of chunks) {
+      const response = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: { text: chunk },
+            voice: {
+              languageCode: "en-US",
+              name: "en-US-Neural2-J",
+            },
+            audioConfig: {
+              audioEncoding: "MP3",
+              speakingRate: 0.92,
+              pitch: -1.0
             }
-          );
-
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`TTS failed: ${errText}`);
-          }
-
-          const data = await response.json();
-          const audioBuffer = Buffer.from(data.audioContent, "base64");
-          combinedBuffer = Buffer.concat([combinedBuffer, audioBuffer]);
-
-          // small delay to avoid rate throttling
-          await new Promise(res => setTimeout(res, 150));
+          }),
         }
+      );
 
-        const filename = `${job_id}/executive.mp3`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("audio")
-          .upload(filename, combinedBuffer, {
-            contentType: "audio/mpeg",
-            upsert: true,
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from("audio")
-          .getPublicUrl(filename);
-
-        await supabase
-          .from("jobs")
-          .update({
-            status: "audio_ready",
-            audio_url: publicUrlData.publicUrl,
-          })
-          .eq("id", job_id);
-
-      } catch (err) {
-        console.error("AUDIO ERROR:", err);
-        await supabase
-          .from("jobs")
-          .update({ status: "failed" })
-          .eq("id", job_id);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`TTS failed: ${errText}`);
       }
-    })();
+
+      const data = await response.json();
+      const audioBuffer = Buffer.from(data.audioContent, "base64");
+      combinedBuffer = Buffer.concat([combinedBuffer, audioBuffer]);
+    }
+
+    const filename = `${job_id}/executive.mp3`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("audio")
+      .upload(filename, combinedBuffer, {
+        contentType: "audio/mpeg",
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: publicUrlData } = supabase.storage
+      .from("audio")
+      .getPublicUrl(filename);
+
+    await supabase
+      .from("jobs")
+      .update({
+        status: "audio_ready",
+        audio_url: publicUrlData.publicUrl,
+      })
+      .eq("id", job_id);
+
+    return res.json({
+      ok: true,
+      audio_url: publicUrlData.publicUrl
+    });
 
   } catch (err) {
+    console.error("AUDIO ERROR:", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
-
 
 
 // ================= JOB STATUS =================
