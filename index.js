@@ -261,15 +261,22 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
 // ================= GENERATE AUDIO =================
 
-function sanitizeForTTS(text) {
-  return text
+function prepareForSSML(text) {
+  const stripped = text
     .replace(/[*_#•]/g, "")
     .replace(/\n+/g, " ")
+    .trim();
+
+  const escaped = stripped
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  return escaped
     .replace(/\.\s+/g, '. <break time="450ms"/> ')
     .replace(/\?\s+/g, '? <break time="500ms"/> ')
     .replace(/!\s+/g, '! <break time="500ms"/> ')
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/\s+/g, " ");
 }
 
 app.post("/generate-audio", async (req, res) => {
@@ -294,9 +301,9 @@ app.post("/generate-audio", async (req, res) => {
       .update({ status: "audio_generating" })
       .eq("id", job_id);
 
-    const cleanScript = sanitizeForTTS(job.script);
+    const cleanScript = prepareForSSML(job.script);
 
-    const CHUNK_SIZE = 2800;
+    const CHUNK_SIZE = 2500;
     const chunks = [];
 
     for (let i = 0; i < cleanScript.length; i += CHUNK_SIZE) {
@@ -311,23 +318,21 @@ app.post("/generate-audio", async (req, res) => {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-
-body: JSON.stringify({
-  input: {
-    ssml: `<speak>${chunk}</speak>`
-  },
-  voice: {
-    languageCode: "en-US",
-    name: "en-US-Neural2-D"
-  },
-  audioConfig: {
-    audioEncoding: "MP3",
-    speakingRate: 0.94,
-    pitch: -0.3
-  }
-})      
-
-}
+          body: JSON.stringify({
+            input: {
+              ssml: `<speak>${chunk}</speak>`
+            },
+            voice: {
+              languageCode: "en-US",
+              name: "en-US-Neural2-D"
+            },
+            audioConfig: {
+              audioEncoding: "MP3",
+              speakingRate: 0.94,
+              pitch: -0.3
+            }
+          })
+        }
       );
 
       if (!response.ok) {
@@ -373,7 +378,6 @@ body: JSON.stringify({
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
-
 
 // ================= JOB STATUS =================
 
