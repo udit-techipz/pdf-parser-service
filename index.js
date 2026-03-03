@@ -264,7 +264,10 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 function sanitizeForTTS(text) {
   return text
     .replace(/[*_#•]/g, "")
-    .replace(/\.\s+/g, '. <break time="300ms"/> ')
+    .replace(/\n+/g, " ")
+    .replace(/\.\s+/g, '. <break time="450ms"/> ')
+    .replace(/\?\s+/g, '? <break time="500ms"/> ')
+    .replace(/!\s+/g, '! <break time="500ms"/> ')
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -308,6 +311,7 @@ app.post("/generate-audio", async (req, res) => {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+
 body: JSON.stringify({
   input: {
     ssml: `<speak>${chunk}</speak>`
@@ -318,10 +322,12 @@ body: JSON.stringify({
   },
   audioConfig: {
     audioEncoding: "MP3",
-    speakingRate: 0.96,
-    pitch: -0.2
+    speakingRate: 0.94,
+    pitch: -0.3
   }
-})        }
+})      
+
+}
       );
 
       if (!response.ok) {
