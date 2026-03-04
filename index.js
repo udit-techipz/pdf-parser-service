@@ -301,14 +301,27 @@ app.post("/generate-audio", async (req, res) => {
       .update({ status: "audio_generating" })
       .eq("id", job_id);
 
-    const cleanScript = prepareForSSML(job.script);
+    // Step 1: Strip + escape only (NO break tags yet)
+function cleanPlainText(text) {
+  return text
+    .replace(/[*_#•]/g, "")
+    .replace(/\n+/g, " ")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-    const CHUNK_SIZE = 2500;
-    const chunks = [];
+const plainText = cleanPlainText(job.script);
 
-    for (let i = 0; i < cleanScript.length; i += CHUNK_SIZE) {
-      chunks.push(cleanScript.slice(i, i + CHUNK_SIZE));
-    }
+// Step 2: Chunk plain text safely
+const CHUNK_SIZE = 2500;
+const chunks = [];
+
+for (let i = 0; i < plainText.length; i += CHUNK_SIZE) {
+  chunks.push(plainText.slice(i, i + CHUNK_SIZE));
+}
 
     let combinedBuffer = Buffer.alloc(0);
 
@@ -320,7 +333,12 @@ app.post("/generate-audio", async (req, res) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             input: {
-              ssml: `<speak>${chunk}</speak>`
+              const ssmlChunk = chunk
+ 		 .replace(/\.\s+/g, '. <break time="450ms"/> ')
+		 .replace(/\?\s+/g, '? <break time="500ms"/> ')
+  	         .replace(/!\s+/g, '! <break time="500ms"/> ');
+
+		ssml: `<speak>${ssmlChunk}</speak>`
             },
             voice: {
               languageCode: "en-US",
