@@ -357,9 +357,10 @@ app.post("/generate-audio", async (req, res) => {
               audioEncoding: "MP3",
               speakingRate: profile.speakingrate,
               pitch: profile.pitch
+
+		const profile = VOICE_PROFILES[job.voice] || VOICE_PROFILES.authoritative;
             }
           })
-	const profile = VOICE_PROFILES[job.voice] || VOICE_PROFILES.authoritative;
         }
       );
 
