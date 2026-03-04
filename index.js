@@ -333,36 +333,36 @@ app.post("/generate-audio", async (req, res) => {
 
     let combinedBuffer = Buffer.alloc(0);
 
-    for (const chunk of chunks) {
+for (const chunk of chunks) {
 
-      const ssmlChunk = chunk
-        .replace(/\.\s+/g, `. <break time="${profile.breakShort}ms"/> `)
-        .replace(/\?\s+/g, `? <break time="${profile.breakLong}ms"/> `)
-        .replace(/!\s+/g, '! <break time="500ms"/> ');
+  const ssmlChunk = chunk
+    .replace(/\.\s+/g, `. <break time="${profile.breakShort}ms"/> `)
+    .replace(/\?\s+/g, `? <break time="${profile.breakLong}ms"/> `)
+    .replace(/!\s+/g, `! <break time="${profile.breakLong}ms"/> `);
 
-      const response = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: {
-              ssml: `<speak>${ssmlChunk}</speak>`
-            },
-            voice: {
-              languageCode: "en-US",
-              name: profile.voice
-            },
-            audioConfig: {
-              audioEncoding: "MP3",
-              speakingRate: profile.speakingrate,
-              pitch: profile.pitch
-
-		const profile = VOICE_PROFILES[job.voice] || VOICE_PROFILES.authoritative;
-            }
-          })
+  const response = await fetch(
+    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: {
+          ssml: `<speak>${ssmlChunk}</speak>`
+        },
+        voice: {
+          languageCode: "en-US",
+          name: profile.voice
+        },
+        audioConfig: {
+          audioEncoding: "MP3",
+          speakingRate: profile.speakingRate,
+          pitch: profile.pitch
         }
-      );
+      })
+    }
+  );
+
+const profile = VOICE_PROFILES[job.voice] || VOICE_PROFILES.authoritative;
 
       if (!response.ok) {
         const errText = await response.text();
