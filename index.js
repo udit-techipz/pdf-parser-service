@@ -8,6 +8,30 @@ const multer = require("multer");
 const OpenAI = require("openai");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+const VOICE_PROFILES = {
+  authoritative: {
+    voice: "en-US-Neural2-D",
+    speakingRate: 0.94,
+    pitch: -0.55,
+    breakShort: 420,
+    breakLong: 500
+  },
+  measured: {
+    voice: "en-US-Neural2-D",
+    speakingRate: 0.96,
+    pitch: -0.3,
+    breakShort: 350,
+    breakLong: 450
+  },
+  intense: {
+    voice: "en-US-Neural2-D",
+    speakingRate: 0.92,
+    pitch: -0.6,
+    breakShort: 300,
+    breakLong: 380
+  }
+};
+
 const fetch = global.fetch;
 
 // ================= PROVIDERS =================
@@ -250,7 +274,8 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
       .insert({
         status: "script_ready",
         script,
-        provider_used: provider
+        provider_used: provider,
+	voice: "authoritative"    // default profile
       })
       .select()
       .single();
@@ -311,8 +336,8 @@ app.post("/generate-audio", async (req, res) => {
     for (const chunk of chunks) {
 
       const ssmlChunk = chunk
-        .replace(/\.\s+/g, '. <break time="450ms"/> ')
-        .replace(/\?\s+/g, '? <break time="500ms"/> ')
+        .replace(/\.\s+/g, `. <break time="${profile.breakShort}ms"/> `)
+        .replace(/\?\s+/g, `? <break time="${profile.breakLong}ms"/> `)
         .replace(/!\s+/g, '! <break time="500ms"/> ');
 
       const response = await fetch(
@@ -326,14 +351,15 @@ app.post("/generate-audio", async (req, res) => {
             },
             voice: {
               languageCode: "en-US",
-              name: "en-US-Neural2-D"
+              name: profile.voice
             },
             audioConfig: {
               audioEncoding: "MP3",
-              speakingRate: 0.94,
-              pitch: -0.3
+              speakingRate: profile.speakingrate,
+              pitch: profile.pitch
             }
           })
+	const profile = VOICE_PROFILES[job.voice] || VOICE_PROFILES.authoritative;
         }
       );
 
