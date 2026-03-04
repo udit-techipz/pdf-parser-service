@@ -89,7 +89,6 @@ async function withTimeout(promise, ms) {
 async function callLLMWithFallback(prompt) {
   const providers = [
     { name: "gemini", fn: () => callGemini(prompt) },
-    { name: "groq", fn: () => callGroq(prompt) },
     { name: "openai", fn: () => callOpenAI(prompt) },
   ];
 
