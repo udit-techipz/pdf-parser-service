@@ -103,13 +103,19 @@ async function callLLMWithFallback(prompt) {
       const message = (err?.message || "").toLowerCase();
       const status = err?.status || err?.response?.status;
 
-      const isRetryable =
-        status === 429 ||
-        status === 500 ||
-        status === 503 ||
-        message.includes("rate") ||
-        message.includes("quota") ||
-        message.includes("timeout");
+	const isRetryable =
+  status === 400 ||
+  status === 408 ||
+  status === 429 ||
+  status === 500 ||
+  status === 502 ||
+  status === 503 ||
+  message.includes("rate") ||
+  message.includes("quota") ||
+  message.includes("timeout") ||
+  message.includes("too large") ||
+  message.includes("context") ||
+  message.includes("token");
 
 	console.error("Provider failed:", provider.name, err);
       if (isRetryable) continue;
