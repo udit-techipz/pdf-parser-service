@@ -111,6 +111,7 @@ async function callLLMWithFallback(prompt) {
         message.includes("quota") ||
         message.includes("timeout");
 
+	console.error("Provider failed:", provider.name, err);
       if (isRetryable) continue;
 
       throw err;
