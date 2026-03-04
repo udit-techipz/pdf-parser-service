@@ -261,61 +261,15 @@ app.post("/parse", upload.single("pdf"), async (req, res) => {
 
 // ================= GENERATE AUDIO =================
 
-function prepareForSSML(text) {
-  const stripped = text
-    .replace(/[*_#•]/g, "")
-    .replace(/\n+/g, " ")
-    .trim();
+const plainText = job.script
+  .replace(/[*_#•]/g, "")
+  .replace(/\n+/g, " ")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/\s+/g, " ")
+  .trim();
 
-  const escaped = stripped
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  return escaped
-    .replace(/\.\s+/g, '. <break time="450ms"/> ')
-    .replace(/\?\s+/g, '? <break time="500ms"/> ')
-    .replace(/!\s+/g, '! <break time="500ms"/> ')
-    .replace(/\s+/g, " ");
-}
-
-app.post("/generate-audio", async (req, res) => {
-  try {
-    const { job_id } = req.body;
-
-    if (!job_id) {
-      return res.status(400).json({ error: "job_id required" });
-    }
-
-    const { data: job, error } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("id", job_id)
-      .single();
-
-    if (error) throw error;
-    if (!job || !job.script) throw new Error("No script found");
-
-    await supabase
-      .from("jobs")
-      .update({ status: "audio_generating" })
-      .eq("id", job_id);
-
-    // Step 1: Strip + escape only (NO break tags yet)
-function cleanPlainText(text) {
-  return text
-    .replace(/[*_#•]/g, "")
-    .replace(/\n+/g, " ")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const plainText = cleanPlainText(job.script);
-
-// Step 2: Chunk plain text safely
 const CHUNK_SIZE = 2500;
 const chunks = [];
 
@@ -323,79 +277,47 @@ for (let i = 0; i < plainText.length; i += CHUNK_SIZE) {
   chunks.push(plainText.slice(i, i + CHUNK_SIZE));
 }
 
-    let combinedBuffer = Buffer.alloc(0);
+let combinedBuffer = Buffer.alloc(0);
 
-    for (const chunk of chunks) {
-      const response = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: {
-              const ssmlChunk = chunk
- 		 .replace(/\.\s+/g, '. <break time="450ms"/> ')
-		 .replace(/\?\s+/g, '? <break time="500ms"/> ')
-  	         .replace(/!\s+/g, '! <break time="500ms"/> ');
+for (const chunk of chunks) {
 
-		ssml: `<speak>${ssmlChunk}</speak>`
-            },
-            voice: {
-              languageCode: "en-US",
-              name: "en-US-Neural2-D"
-            },
-            audioConfig: {
-              audioEncoding: "MP3",
-              speakingRate: 0.94,
-              pitch: -0.3
-            }
-          })
+  // Define ssmlChunk HERE
+  const ssmlChunk = chunk
+    .replace(/\.\s+/g, '. <break time="450ms"/> ')
+    .replace(/\?\s+/g, '? <break time="500ms"/> ')
+    .replace(/!\s+/g, '! <break time="500ms"/> ');
+
+  const response = await fetch(
+    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.GOOGLE_TTS_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: {
+          ssml: `<speak>${ssmlChunk}</speak>`
+        },
+        voice: {
+          languageCode: "en-US",
+          name: "en-US-Neural2-D"
+        },
+        audioConfig: {
+          audioEncoding: "MP3",
+          speakingRate: 0.94,
+          pitch: -0.3
         }
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`TTS failed: ${errText}`);
-      }
-
-      const data = await response.json();
-      const audioBuffer = Buffer.from(data.audioContent, "base64");
-      combinedBuffer = Buffer.concat([combinedBuffer, audioBuffer]);
-    }
-
-    const filename = `${job_id}/executive.mp3`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("audio")
-      .upload(filename, combinedBuffer, {
-        contentType: "audio/mpeg",
-        upsert: true,
-      });
-
-    if (uploadError) throw uploadError;
-
-    const { data: publicUrlData } = supabase.storage
-      .from("audio")
-      .getPublicUrl(filename);
-
-    await supabase
-      .from("jobs")
-      .update({
-        status: "audio_ready",
-        audio_url: publicUrlData.publicUrl,
       })
-      .eq("id", job_id);
+    }
+  );
 
-    return res.json({
-      ok: true,
-      audio_url: publicUrlData.publicUrl
-    });
-
-  } catch (err) {
-    console.error("AUDIO ERROR:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`TTS failed: ${errText}`);
   }
-});
+
+  const data = await response.json();
+  const audioBuffer = Buffer.from(data.audioContent, "base64");
+  combinedBuffer = Buffer.concat([combinedBuffer, audioBuffer]);
+}
 
 // ================= JOB STATUS =================
 
