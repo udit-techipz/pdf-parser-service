@@ -107,7 +107,7 @@ async function callGemini(prompt) {
   const result = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      maxOutputTokens: 11500,
+      maxOutputTokens: 11000,
       temperature: 0.4
     }
   });
@@ -193,7 +193,7 @@ Favor:
 • Sentences under 20 words
 
 Minimum length requirement:
-Minimum output length: 5,500 words.
+Minimum output length: 5,000 words.
 
 If the output is under this length, continue expanding each section with deeper analysis, trade-offs, counterfactuals, and decision frameworks until the threshold is exceeded.
 
