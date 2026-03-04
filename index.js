@@ -107,7 +107,7 @@ async function callGemini(prompt) {
   const result = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      maxOutputTokens: 8000,
+      maxOutputTokens: 12000,
       temperature: 0.4
     }
   });
@@ -193,8 +193,15 @@ Favor:
 • Sentences under 20 words
 
 Minimum length requirement:
-Deliver at least 4,500 words.
-Expand depth if necessary.
+Minimum output length: 5,500 words.
+
+If the output is under this length, continue expanding each section with deeper analysis, trade-offs, counterfactuals, and decision frameworks until the threshold is exceeded.
+
+Do not conclude early.
+Do not compress ideas.
+Depth is required over brevity.
+
+Each section must contain no fewer than 1,000 words.
 
 Assume your audience is intelligent, skeptical, and time-constrained.
 
