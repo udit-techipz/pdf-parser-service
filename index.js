@@ -107,7 +107,7 @@ async function callGemini(prompt) {
   const result = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      maxOutputTokens: 12000,
+      maxOutputTokens: 11500,
       temperature: 0.4
     }
   });
