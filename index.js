@@ -316,6 +316,8 @@ app.post("/generate-audio", async (req, res) => {
     if (error) throw error;
     if (!job || !job.script) throw new Error("No script found");
 
+	const profile = VOICE_PROFILES[job.voice] || VOICE_PROFILES.authoritative;
+
     await supabase
       .from("jobs")
       .update({ status: "audio_generating" })
@@ -368,7 +370,6 @@ for (const chunk of chunks) {
     }
   );
 
-const profile = VOICE_PROFILES[job.voice] || VOICE_PROFILES.authoritative;
 
       if (!response.ok) {
         const errText = await response.text();
